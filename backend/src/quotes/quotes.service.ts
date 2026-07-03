@@ -28,6 +28,7 @@ export interface CreateQuoteInput {
   fenceSegments: FenceSegment[];
   floorPlanUrl?: string;
   renderUrl?: string;
+  threeJsCode?: string;
 }
 
 // Status transition graph - prevents regression (DRAFT <- SENT) and
@@ -133,6 +134,7 @@ export class QuotesService {
       total: Number(q.total),
       selectedDesign: q.selectedDesign ? { id: q.selectedDesign.id, name: q.selectedDesign.name, overlayUrl: q.selectedDesign.overlayUrl } : null,
       renderUrl: q.renderUrl,
+      threeJsCode: q.threeJsCode || null,
       // Public-safe wholesaler block: name + logo only. The wholesaler's
       // direct contact email/phone is internal PII and must not be
       // exposed to anyone holding the approval link.
@@ -239,6 +241,7 @@ export class QuotesService {
           floorPlanHeightM: dto.floorPlanHeightM,
           fenceSegments: dto.fenceSegments as any,
           renderUrl: dto.renderUrl,
+          threeJsCode: dto.threeJsCode || null,
           validUntil: dto.validUntil ? new Date(dto.validUntil) : null,
           subtotal, taxRate, taxAmount, total,
           status: QuoteStatus.DRAFT,
@@ -364,8 +367,9 @@ export class QuotesService {
 
     const isDraft = q.status === QuoteStatus.DRAFT;
     if (!isDraft) {
-      // Once sent, only metadata fields (notes, renderUrl) can be patched
-      const allowed: (keyof CreateQuoteInput)[] = ['notes', 'renderUrl'];
+      // Once sent, only metadata fields (notes, renderUrl,
+      // threeJsCode) can be patched.
+      const allowed: (keyof CreateQuoteInput)[] = ['notes', 'renderUrl', 'threeJsCode'];
       const attempted = Object.keys(dto) as (keyof CreateQuoteInput)[];
       const blocked = attempted.filter(k => !allowed.includes(k));
       if (blocked.length) {
@@ -390,6 +394,7 @@ export class QuotesService {
     if (dto.floorPlanWidthM !== undefined) data.floorPlanWidthM = dto.floorPlanWidthM;
     if (dto.floorPlanHeightM !== undefined) data.floorPlanHeightM = dto.floorPlanHeightM;
     if (dto.renderUrl !== undefined) data.renderUrl = dto.renderUrl;
+    if (dto.threeJsCode !== undefined) data.threeJsCode = dto.threeJsCode || null;
     if (dto.validUntil !== undefined) data.validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
     if (dto.taxRate !== undefined) data.taxRate = dto.taxRate;
 
@@ -516,6 +521,7 @@ export class QuotesService {
       floorPlanWidthM: src.floorPlanWidthM || undefined,
       floorPlanHeightM: src.floorPlanHeightM || undefined,
       renderUrl: src.renderUrl || undefined,
+      threeJsCode: src.threeJsCode || undefined,
       validUntil: src.validUntil ? src.validUntil.toISOString() : undefined,
       taxRate: Number(src.taxRate),
       fenceSegments: segments as any,

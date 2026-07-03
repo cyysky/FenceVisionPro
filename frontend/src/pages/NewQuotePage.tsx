@@ -32,11 +32,15 @@ export default function NewQuotePage() {
   // moment it's produced, so the image survives a page refresh.
   const [draftId, setDraftId] = useState<string | null>(null);
 
-  // Tab-scoped persistence for the AI image. The user expects
-  // "I just generated this image" to survive a navigation back
-  // to the dashboard and a return to NewQuotePage, but not to
-  // outlive the tab.
+  // Tab-scoped persistence for the AI image and the LLM-generated
+  // 3D code. The user expects both to survive a navigation back
+  // to the dashboard and a return to NewQuotePage, and to be
+  // present again after a refresh of this page.
   const aiImageKey = 'fvp.newQuote.aiImageUrl';
+  const threeCodeKey = 'fvp.newQuote.threeCode';
+  const [initialThreeCode, setInitialThreeCode] = useState<string | null>(() => {
+    try { return sessionStorage.getItem(threeCodeKey); } catch { return null; }
+  });
   useEffect(() => {
     const saved = sessionStorage.getItem(aiImageKey);
     if (saved) setAiImageUrl(saved);
@@ -175,8 +179,10 @@ export default function NewQuotePage() {
         await api.put(`/quotes/${quoteId}/status`, { status: 'SENT' });
       }
       // The render is now persisted on the quote; drop the
-      // sessionStorage copy so the next NewQuotePage starts clean.
+      // sessionStorage copies so the next NewQuotePage starts
+      // clean.
       try { sessionStorage.removeItem(aiImageKey); } catch { /* ignore */ }
+      try { sessionStorage.removeItem(threeCodeKey); } catch { /* ignore */ }
       nav(`/quotes/${quoteId}`);
     } catch (e: any) {
       setErr(e?.response?.data?.message || 'Failed to save quote');
@@ -251,8 +257,13 @@ export default function NewQuotePage() {
                 color={colorForAi}
                 heightFt={heightFt}
                 panelCount={Math.ceil(segments.reduce((s, x) => s + x.lengthM, 0) / 2.4)}
+                housePhotoUrl={housePhotoUrl}
+                initialCode={initialThreeCode}
                 onImage={(url) => persistAiImage(url)}
                 onAnalyse={(r) => applyVisionResult(r)}
+                onCode={(code) => {
+                  try { sessionStorage.setItem(threeCodeKey, code); } catch { /* ignore */ }
+                }}
               />
             </div>
           </Card>

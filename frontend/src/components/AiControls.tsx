@@ -12,6 +12,23 @@ interface Props {
   onSnapshot?: (dataUrl: string) => void; // called with a data: URL when 3D snapshot is captured
   quoteId?: string;                   // if provided, the snapshot is POSTed to the backend
   onAnalyse?: (result: AnalyseResult) => void; // vision-model inference from an uploaded photo
+  /**
+   * URL of the customer's house photo that the parent page
+   * uploaded (via /quotes/upload-floorplan). When present and
+   * the user clicks 'Generate image' without having run the
+   * 'Analyse photo' step, we automatically call
+   * /ai/analyse-photo-url so the image prompt includes the
+   * property context.
+   */
+  housePhotoUrl?: string | null;
+  /**
+   * Persist the LLM-generated three.js source so it survives
+   * a page refresh. The parent typically wires this to
+   * sessionStorage (tab-scoped) and / or the quote's PATCH
+   * endpoint when a quoteId is present.
+   */
+  initialCode?: string | null;
+  onCode?: (code: string) => void;
 }
 
 /** Shape returned by POST /ai/analyse-photo (subset we care about). */
@@ -32,10 +49,10 @@ export interface AnalyseResult {
  * sandboxed iframe once it loads; users can also capture the 3D
  * frame as the quote's persisted render.
  */
-export function AiControls({ style, color, heightFt, panelCount, gateCount, onImage, onSnapshot, quoteId, onAnalyse }: Props) {
+export function AiControls({ style, color, heightFt, panelCount, gateCount, onImage, onSnapshot, quoteId, onAnalyse, housePhotoUrl, initialCode, onCode }: Props) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [code, setCode] = useState<string | null>(null);
+  const [code, setCode] = useState<string | null>(initialCode || null);
   const [busy, setBusy] = useState<'image' | '3d' | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
@@ -50,15 +67,37 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
       .catch(() => setEnabled(false));
   }, []);
 
+  // Forward generated/restored code up so the parent can
+  // persist it (sessionStorage / quote PATCH).
+  useEffect(() => { if (code) onCode?.(code); }, [code, onCode]);
+
   async function genImage() {
     setBusy('image'); setErr(null);
     try {
-      // Splice in the vision-model description from a previously
-      // analysed photo (if any) so the image model has the
-      // property context it needs to produce a faithful render.
-      const visionDescription = analyseResult
-        ? [analyseResult.notes, analyseResult.surroundings].filter(Boolean).join('. ') || analyseResult.raw
-        : undefined;
+      // Splice in the vision-model description so the image
+      // model has the property context it needs. We prefer a
+      // previously-run local analyse (most up-to-date), but
+      // fall back to a one-shot analyse of the parent-uploaded
+      // house photo if the user didn't click 'Analyse photo'
+      // themselves. This means the user's uploaded photo
+      // ALWAYS informs the generated image, even if they
+      // skipped the explicit analyse step.
+      let visionDescription: string | undefined;
+      if (analyseResult) {
+        visionDescription = [analyseResult.notes, analyseResult.surroundings]
+          .filter(Boolean).join('. ') || analyseResult.raw;
+      } else if (housePhotoUrl) {
+        try {
+          const { data } = await api.post('/ai/analyse-photo-url', { imageUrl: housePhotoUrl });
+          setAnalyseResult(data);
+          onAnalyse?.(data);
+          visionDescription = [data.notes, data.surroundings].filter(Boolean).join('. ') || data.raw;
+        } catch (e: any) {
+          // Non-fatal: fall through and generate without the
+          // vision context.
+          setErr(prev => prev ? prev : (e?.response?.data?.message || 'Photo analysis failed - generating without property context'));
+        }
+      }
       const { data } = await api.post('/ai/render-image', {
         style, color, heightFt, panelCount, gateCount, visionDescription,
       });

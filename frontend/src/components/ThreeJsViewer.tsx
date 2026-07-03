@@ -22,10 +22,43 @@ interface Props {
   onSnapshot?: (dataUrl: string) => void;
 }
 
-// Origin used for postMessage from the sandboxed iframe. The iframe
-// is created from a blob: URL so its origin is "null"; we accept any
-// origin and rely on a randomly-generated handshake token.
+/**
+ * Names of variables we expect the LLM-generated three.js code to
+ * declare at the top level. The host wrapper rewrites their
+ * declarations into `window.NAME = ...` so the auto-orbit IIFE
+ * can find the camera / renderer / scene / controls even when
+ * the model uses block-scoped `const` / `let`.
+ */
+const HOST_HOISTED_VARS = ['camera', 'renderer', 'scene', 'controls'];
+
+/**
+ * Rewrite top-level declarations of the host-hoisted variable
+ * names so they become assignments to `window.NAME`. We only
+ * touch lines that START with `const|let|var NAME =` (no
+ * leading whitespace) so we don't accidentally rewrite
+ * function-local declarations.
+ */
+function hoistHostVars(code: string): string {
+  let out = code;
+  for (const name of HOST_HOISTED_VARS) {
+    // 1) Declaration: `const NAME = ...`, `let NAME = ...`,
+    //    `var NAME = ...` at the start of a line.
+    const re = new RegExp(
+      '^(const|let|var)\\s+' + name + '\\s*=',
+      'gm',
+    );
+    out = out.replace(re, 'window.' + name + ' =');
+    // 2) Bare assignment: `NAME = ...` at the start of a line
+    //    (the model often declares `let NAME;` first and
+    //    assigns later). Skip if we already prefixed it.
+    const re2 = new RegExp('^' + name + '\\s*=', 'gm');
+    out = out.replace(re2, (m) => m.startsWith('window.') ? m : 'window.' + m);
+  }
+  return out;
+}
+
 function buildHtml(code: string, handshake: string): string {
+  const hoisted = hoistHostVars(code);
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:#0f172a;overflow:hidden;font-family:sans-serif;color:#cbd5e1}
 canvas{display:block}
@@ -41,22 +74,19 @@ window.addEventListener('error', function(e){
   el.textContent = (e.error && e.error.stack) || e.message;
   el.style.display = 'block';
 });
-// Snapshot handshake: parent posts {type:'snapshot', token:HS} to us
-// and we reply with a PNG dataURL via postMessage.
 window.addEventListener('message', function(e) {
   var m = e.data;
   if (!m || m.type !== 'snapshot' || m.token !== ${JSON.stringify(handshake)}) return;
   try {
     var cv = document.querySelector('canvas');
     if (!cv) { parent.postMessage({type:'snapshot-error', token: m.token, message:'no canvas'}, '*'); return; }
-    // Force a final render frame to make sure the buffer is fresh
     parent.postMessage({type:'snapshot', token: m.token, dataUrl: cv.toDataURL('image/png')}, '*');
   } catch (err) {
     parent.postMessage({type:'snapshot-error', token: m.token, message: String(err && err.message || err)}, '*');
   }
 });
 try {
-${code}
+${hoisted}
 } catch (e) {
   var el = document.getElementById('err');
   el.textContent = (e && e.stack) || String(e);
@@ -64,41 +94,48 @@ ${code}
 }
 
 /**
- * Auto-attach OrbitControls. LLM-generated code is inconsistent
- * - some snippets wire up controls, others don't. The host wants
- * the user to always be able to drag/zoom/pan the 3D view with
- * the mouse, regardless of what the model emitted, so we look
- * at the global scope for any camera + renderer pair and attach
- * controls ourselves. We do this in a microtask + a short retry
- * loop because the LLM code may construct the camera inside an
- * init() function that runs after this script block.
+ * Auto-attach OrbitControls. The LLM-generated code has been
+ * hoisted (camera / renderer / scene / controls -> window.*)
+ * so we can read them here. We try once immediately, then keep
+ * trying for up to 3s in case the LLM constructs them
+ * asynchronously (e.g. inside an init() or setTimeout).
+ *
+ * If the LLM code already wired up its own OrbitControls we
+ * reuse it; otherwise we create one and drive the render loop
+ * ourselves.
  */
 (function() {
   function attach() {
     try {
-      var cam = (typeof camera !== 'undefined') ? camera : null;
-      var ren = (typeof renderer !== 'undefined') ? renderer : null;
+      var cam = window.camera;
+      var ren = window.renderer;
       if (!cam || !ren || !window.THREE || !window.THREE.OrbitControls) return false;
-      // Avoid double-attaching if the LLM code already did it.
       if (window.__fvpControls) return true;
-      var c = new window.THREE.OrbitControls(cam, ren.domElement);
+      var c = window.controls || new window.THREE.OrbitControls(cam, ren.domElement);
       c.enableDamping = true;
       c.dampingFactor = 0.08;
-      c.target.set(0, 1, 0);
+      // Aim the controls at the centre of the scene if we can
+      // find one, otherwise the world origin.
+      try {
+        var s = window.scene;
+        if (s) {
+          var box = new window.THREE.Box3().setFromObject(s);
+          if (box.isEmpty() === false) {
+            var centre = new window.THREE.Vector3();
+            box.getCenter(centre);
+            c.target.copy(centre);
+          }
+        }
+      } catch (e) { /* ignore */ }
       c.update();
       window.__fvpControls = c;
-      // Drive the render loop from the controls' change events so
-      // dragging actually updates the viewport. If the LLM code
-      // already had its own animate() loop, that's fine - controls
-      // just call cam.update() lazily and the existing loop will
-      // re-render on the next frame.
-      var tick = function() { c.update(); requestAnimationFrame(tick); };
-      requestAnimationFrame(tick);
+      if (!window.__fvpHasAnimate) {
+        var tick = function() { c.update(); requestAnimationFrame(tick); };
+        requestAnimationFrame(tick);
+      }
       return true;
     } catch (e) { return false; }
   }
-  // Try once now, then keep trying for up to 3s in case the
-  // LLM code constructs the camera asynchronously.
   if (!attach()) {
     var tries = 0;
     var iv = setInterval(function() {
@@ -112,7 +149,6 @@ ${code}
 }
 
 function genHandshake(): string {
-  // 16 bytes of randomness -> hex. We pair it with the Blob URL.
   const a = new Uint8Array(16);
   (window.crypto || (window as any).msCrypto).getRandomValues(a);
   return Array.from(a, b => b.toString(16).padStart(2, '0')).join('');
@@ -142,7 +178,6 @@ export function ThreeJsViewer({ code, height = 480, onSnapshot }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
 
-  // Listen for snapshot replies from the iframe
   useEffect(() => {
     if (!onSnapshot) return;
     const handler = (e: MessageEvent) => {
@@ -165,8 +200,6 @@ export function ThreeJsViewer({ code, height = 480, onSnapshot }: Props) {
     if (!w) return;
     setSnapshotting(true);
     w.postMessage({ type: 'snapshot', token: handshake }, '*');
-    // Failsafe - if the iframe is slow or doesn't reply, clear the
-    // spinner after a few seconds so the UI doesn't get stuck.
     setTimeout(() => setSnapshotting(false), 8000);
   }
 

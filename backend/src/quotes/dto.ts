@@ -37,6 +37,7 @@ export class CreateQuoteDto {
   @IsOptional() @IsNumber() @Min(0) floorPlanWidthM?: number;
   @IsOptional() @IsNumber() @Min(0) floorPlanHeightM?: number;
   @IsOptional() @IsString() renderUrl?: string;
+  @IsOptional() @IsString() @MaxLength(200_000) threeJsCode?: string;
 
   @IsOptional() @IsString() validUntil?: string;
 
@@ -76,6 +77,7 @@ export class UpdateQuoteDto {
   @IsOptional() @IsNumber() @Min(0) floorPlanWidthM?: number;
   @IsOptional() @IsNumber() @Min(0) floorPlanHeightM?: number;
   @IsOptional() @IsString() renderUrl?: string;
+  @IsOptional() @IsString() @MaxLength(200_000) threeJsCode?: string;
 
   @IsOptional() @IsString() validUntil?: string;
 

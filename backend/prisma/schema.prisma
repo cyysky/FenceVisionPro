@@ -157,8 +157,9 @@ model Quote {
   selectedDesignId String?
   selectedDesign   Design? @relation(fields: [selectedDesignId], references: [id])
 
-  renderUrl   String?  // composited preview image
-  pdfUrl      String?  // generated quotation PDF
+  renderUrl     String?  // composited preview image
+  pdfUrl        String?  // generated quotation PDF
+  threeJsCode   String?  @db.Text // LLM-generated three.js source for the 3D preview
 
   subtotal    Decimal  @default(0) @db.Decimal(12, 2)
   taxRate     Decimal  @default(0) @db.Decimal(5, 2)

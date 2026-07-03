@@ -82,6 +82,20 @@ export default function QuoteDetailPage() {
     } finally { setSavingRender(false); }
   }
 
+  /**
+   * Persist the LLM-generated three.js code onto the quote so
+   * the 3D preview survives a page refresh. Best-effort: a
+   * failure here doesn't block the UI.
+   */
+  async function persistCode(code: string) {
+    try {
+      await api.patch(`/quotes/${id}`, { threeJsCode: code });
+      setQuote((q: any) => ({ ...q, threeJsCode: code }));
+    } catch {
+      /* best-effort */
+    }
+  }
+
   async function copyLink() {
     const link = `${window.location.origin}/approve/${quote.id}`;
     try {
@@ -200,7 +214,9 @@ export default function QuoteDetailPage() {
             color={color}
             heightFt={heightFt}
             panelCount={quote.lineItems?.length}
+            initialCode={quote.threeJsCode}
             onImage={persistRender}
+            onCode={persistCode}
           />
         </section>
 
