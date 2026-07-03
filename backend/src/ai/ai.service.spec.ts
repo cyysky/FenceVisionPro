@@ -112,8 +112,73 @@ describe('AiService - parseVisionJson edge cases (via reflection)', () => {
     // balanced-brace extraction should still succeed.
     expect(parse('{"style":"Priv')).toBeNull(); // unclosed {, no balancing
   });
-  it('returns the first balanced object when multiple are present', () => {
+  it('returns the LAST object that looks like the answer schema', () => {
+    // When multiple balanced objects exist, we prefer the last
+    // one that contains an expected key like `style`. This
+    // makes the parser robust to the model dumping JSON-like
+    // text in its preamble / thinking trace.
     const t = 'preamble {"x":1} middle {"style":"Vinyl"} tail';
-    expect(parse(t)).toEqual({ x: 1 });
+    expect(parse(t)).toEqual({ style: 'Vinyl' });
+  });
+});
+
+describe('AiService - parseVisionJson reasoning-trace handling', () => {
+  let svc: AiService;
+  beforeAll(() => { svc = Object.create(AiService.prototype); });
+  function parse(x: string) { return (svc as any).parseVisionJson(x); }
+
+  it('extracts JSON from a Qwen-style "Thinking Process:" preamble', () => {
+    const text = `Thinking Process:
+
+1.  **Analyze the Request:**
+    *   **Role:** Fence-industry visual estimator.
+    *   **Task:** Look at a photo of a house or yard.
+    *   **Output:** JSON object with style, color, heightFt, etc.
+
+2.  **Examine the Image:**
+    *   Two-storey suburban home, white siding, black shutters.
+    *   Existing chain-link fence along the back property line.
+
+3.  **Formulate the JSON:**
+    {\"style\":\"Privacy\",\"color\":\"White\",\"heightFt\":6,\"surroundings\":\"suburban backyard with mature trees\",\"notes\":\"two-storey house with white siding\",\"confidence\":0.88}`;
+    expect(parse(text)).toEqual({
+      style: 'Privacy', color: 'White', heightFt: 6,
+      surroundings: 'suburban backyard with mature trees',
+      notes: 'two-storey house with white siding', confidence: 0.88,
+    });
+  });
+
+  it('extracts JSON from a <think>...</think> block', () => {
+    const text = `<think>The user uploaded a photo. I need to estimate the fence parameters.</think>{\"style\":\"Picket\",\"color\":\"White\",\"heightFt\":4,\"surroundings\":\"front yard\",\"notes\":\"\",\"confidence\":0.7}`;
+    expect(parse(text)).toEqual({
+      style: 'Picket', color: 'White', heightFt: 4,
+      surroundings: 'front yard', notes: '', confidence: 0.7,
+    });
+  });
+
+  it('extracts JSON from a <reasoning>...</reasoning> block', () => {
+    const text = `<reasoning>Looking at the image...</reasoning>{\"style\":\"Wrought Iron\",\"color\":\"Black\",\"heightFt\":5,\"surroundings\":\"garden\",\"notes\":\"\",\"confidence\":0.6}`;
+    expect(parse(text)).toEqual({
+      style: 'Wrought Iron', color: 'Black', heightFt: 5,
+      surroundings: 'garden', notes: '', confidence: 0.6,
+    });
+  });
+
+  it('skips JSON-looking prose inside a thinking trace', () => {
+    // The thinking trace itself has `{"role": ...}` snippets.
+    // The real answer is the LAST object.
+    const text = `Reasoning: I see a {"role":"house"} in {"stage":"yard"}. Final answer: {\"style\":\"Vinyl\",\"color\":\"Tan\",\"heightFt\":6,\"surroundings\":\"\",\"notes\":\"\",\"confidence\":0.5}`;
+    expect(parse(text)).toEqual({
+      style: 'Vinyl', color: 'Tan', heightFt: 6,
+      surroundings: '', notes: '', confidence: 0.5,
+    });
+  });
+
+  it('parses the answer with trailing comma after a long preamble', () => {
+    const text = 'Reasoning: very long.\n\n{\"style\":\"Wood\",\"color\":\"Natural\",\"heightFt\":6,\"surroundings\":\"rural\",\"notes\":\"\",\"confidence\":0.9,}';
+    expect(parse(text)).toEqual({
+      style: 'Wood', color: 'Natural', heightFt: 6,
+      surroundings: 'rural', notes: '', confidence: 0.9,
+    });
   });
 });

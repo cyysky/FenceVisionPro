@@ -295,7 +295,7 @@ export class AiService {
               ],
             },
           ],
-          max_tokens: 600,
+          max_tokens: 1500,
           temperature: 0.2,
         });
         break;
@@ -317,7 +317,7 @@ export class AiService {
       // operator can see why the parser gave up. The full text is
       // also returned in the response `raw` field when parsing
       // succeeds, so this stays operator-only.
-      this.logger.warn(`vision model returned unparseable JSON (${raw.length} chars): ${raw.slice(0, 400)}`);
+      this.logger.warn(`vision model returned unparseable JSON (${raw.length} chars): ${raw.slice(0, 2000)}`);
       throw new BadRequestException(
         `vision model did not return a parseable JSON object (first 120 chars: ${JSON.stringify(raw.slice(0, 120))})`,
       );
@@ -358,34 +358,114 @@ export class AiService {
     t = t
       .replace(/[\u2018\u2019]/g, "'")
       .replace(/[\u201C\u201D]/g, '"');
-    // Direct parse
+
+    // Strip reasoning / chain-of-thought blocks. qwen3.5-397b
+    // (and most reasoning-tuned models) emit a long "Thinking
+    // Process:" / <think> / <reasoning> preamble before the
+    // final answer, and the prose itself often contains
+    // JSON-like braces that confuse brace-based extraction.
+    const thinkTags = [
+      /<think>[\s\S]*?<\/think>/gi,
+      /<reasoning>[\s\S]*?<\/reasoning>/gi,
+      /<analysis>[\s\S]*?<\/analysis>/gi,
+      /<reflection>[\s\S]*?<\/reflection>/gi,
+    ];
+    for (const re of thinkTags) t = t.replace(re, ' ');
+    // Plain-text "Thinking Process:" / "Reasoning:" / "Analysis:"
+    // sections that run until a blank line or a line that begins
+    // with `{` (where the actual answer starts).
+    t = t.replace(
+      /^(?:\s*(?:Thinking Process|Reasoning|Analysis|Chain[- ]of[- ]Thought|Internal Monologue|Scratchpad|Let me think)[\s\S]*?)(?=\n\s*\n|\n\s*\{|\n```)/i,
+      ' ',
+    );
+
+    // Strategy 1: direct parse of the whole response.
     try { return JSON.parse(t); } catch { /* fall through */ }
-    // Strip ```json / ``` fences (whole response or inline)
-    const whole = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/i);
-    if (whole) {
-      try { return JSON.parse(whole[1].trim()); } catch { /* fall through */ }
+
+    // Strategy 2: fenced blocks. The LAST fence is usually the
+    // final answer, so try from the end first.
+    const fences = [...t.matchAll(/```(?:json|js|javascript)?\s*\n?([\s\S]*?)\n?```/gi)];
+    for (let i = fences.length - 1; i >= 0; i--) {
+      try { return JSON.parse(fences[i][1].trim()); } catch { /* try next */ }
     }
-    const any = t.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/gi);
-    if (any && any.length) {
-      // Try the LAST fenced block (the model usually puts the
-      // final answer at the end).
-      for (let i = any.length - 1; i >= 0; i--) {
-        const m = any[i].match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
-        if (!m) continue;
-        try { return JSON.parse(m[1].trim()); } catch { /* try the next */ }
+
+    // Strategy 3: find the LAST balanced top-level {...} block.
+    // Reasoning models dump JSON-like text in their thinking
+    // trace, so the *last* { ... } is the actual answer, not
+    // the first. We scan from the end of the string backwards.
+    const candidates: string[] = [];
+    for (let i = t.length - 1; i >= 0; i--) {
+      if (t[i] === '}') {
+        const start = this.findMatchingOpenBrace(t, i);
+        if (start != null) {
+          const candidate = t.slice(start, i + 1);
+          if (this.looksLikeAnswerObject(candidate)) {
+            candidates.push(candidate);
+          }
+          // Skip past this block so we don't re-find the same one
+          i = start;
+        }
       }
+      if (candidates.length >= 3) break;
     }
-    // Try a permissive balanced {...} walk that ALSO removes
-    // trailing commas before } or ] (a common model habit).
-    const start = t.indexOf('{');
-    if (start >= 0) {
-      const candidate = this.extractBalancedObject(t, start);
-      if (candidate) {
-        try { return JSON.parse(candidate); } catch { /* try after cleanup */ }
-        try { return JSON.parse(this.stripTrailingCommas(candidate)); } catch { /* fall through */ }
+    for (const c of candidates) {
+      try { return JSON.parse(c); } catch { /* try with trailing-comma cleanup */ }
+      try { return JSON.parse(this.stripTrailingCommas(c)); } catch { /* next */ }
+    }
+
+    // Strategy 4: the *last* balanced {...} block regardless of
+    // whether it looks like our schema. Fallback for when the
+    // model returns a slightly different shape.
+    for (let i = t.length - 1; i >= 0; i--) {
+      if (t[i] === '}') {
+        const start = this.findMatchingOpenBrace(t, i);
+        if (start != null) {
+          const c = t.slice(start, i + 1);
+          try { return JSON.parse(c); } catch { /* next */ }
+          try { return JSON.parse(this.stripTrailingCommas(c)); } catch { /* next */ }
+          return null;
+        }
       }
     }
     return null;
+  }
+
+  /**
+   * Given the index of a `}` in `s`, find the index of its
+   * matching `{` (honouring nested braces and string literals).
+   * Returns null if the brace isn't part of a balanced object.
+   */
+  private findMatchingOpenBrace(s: string, closeIdx: number): number | null {
+    let depth = 0;
+    let inStr = false;
+    let strQuote = '"';
+    let escape = false;
+    for (let i = closeIdx; i >= 0; i--) {
+      const ch = s[i];
+      if (inStr) {
+        if (escape) { escape = false; continue; }
+        // We walk backwards, so the escape char is to the right
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === strQuote) inStr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inStr = true; strQuote = ch; continue; }
+      if (ch === '}') depth++;
+      else if (ch === '{') {
+        depth--;
+        if (depth === 0) return i;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Heuristic: does this candidate look like the answer object
+   * (contains at least one of our expected keys)? Used to
+   * disambiguate from JSON-like text inside the thinking trace.
+   */
+  private looksLikeAnswerObject(candidate: string): boolean {
+    return /"(style|color|heightFt|surroundings|notes|confidence)"\s*:/.test(candidate);
   }
 
   /**
