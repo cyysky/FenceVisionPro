@@ -144,7 +144,13 @@ export class QuotesService {
     };
   }
 
-  async create(wholesalerId: string, createdById: string, dto: CreateQuoteInput) {
+  async create(wholesalerId: string | null, createdById: string, dto: CreateQuoteInput) {
+    // Admins (wholesalerId=null) do not own quotes. Refuse early
+    // with a 403 rather than letting the Prisma transaction blow
+    // up on `priceOverride.findMany({ where: { wholesalerId: null }})`.
+    if (!wholesalerId) {
+      throw new ForbiddenException('Only wholesaler users can create quotes');
+    }
     if (!dto.fenceSegments?.length) {
       throw new BadRequestException('At least one fence segment is required to create a quote');
     }
@@ -155,7 +161,11 @@ export class QuotesService {
       const products = productIds.length
         ? await tx.product.findMany({ where: { id: { in: productIds } } })
         : [];
-      const overrides = productIds.length
+      // Defensive: if for any reason wholesalerId is null inside
+      // the transaction (shouldn't happen now, but keeps the
+      // service safe to call from internal contexts) skip the
+      // price-override lookup rather than crash.
+      const overrides = productIds.length && wholesalerId
         ? await tx.priceOverride.findMany({ where: { wholesalerId, productId: { in: productIds } } })
         : [];
       const priceMap = new Map<string, number>();

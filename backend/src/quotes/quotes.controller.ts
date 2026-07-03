@@ -38,7 +38,7 @@ export class QuotesController {
 
   @Post()
   create(@Body() dto: CreateQuoteDto, @CurrentUser() u: JwtPayload) {
-    return this.svc.create(u.wholesalerId!, u.sub, dto as unknown as CreateQuoteInput);
+    return this.svc.create(u.wholesalerId, u.sub, dto as unknown as CreateQuoteInput);
   }
 
   @Post(':id/clone')

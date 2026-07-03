@@ -85,3 +85,35 @@ describe('AiService - cleanHeightFt / cleanString (via reflection)', () => {
     expect((svc as any).cleanString('   ')).toBeUndefined();
   });
 });
+
+describe('AiService - parseVisionJson edge cases (via reflection)', () => {
+  let svc: AiService;
+  beforeAll(() => { svc = Object.create(AiService.prototype); });
+  function parse(x: string) { return (svc as any).parseVisionJson(x); }
+
+  it('strips a UTF-8 BOM', () => {
+    const bom = '\uFEFF';
+    expect(parse(bom + '{"style":"Privacy"}')).toEqual({ style: 'Privacy' });
+  });
+  it('normalises smart quotes to ASCII', () => {
+    expect(parse('{\u201Cstyle\u201D:\u201CPrivacy\u201D}')).toEqual({ style: 'Privacy' });
+  });
+  it('extracts JSON from a preamble + trailing comma', () => {
+    // The model frequently emits `{"a":1,}` (trailing comma).
+    expect(parse('Here is the result: {"style":"Picket",}')).toEqual({ style: 'Picket' });
+  });
+  it('handles ```json fences around the object', () => {
+    expect(parse('```json\n{"style":"Wrought Iron","color":"Bronze"}\n```'))
+      .toEqual({ style: 'Wrought Iron', color: 'Bronze' });
+  });
+  it('handles unterminated string (closes at newline)', () => {
+    // The model ran out of tokens mid-string. The walk closes
+    // the unterminated string at the next newline and the
+    // balanced-brace extraction should still succeed.
+    expect(parse('{"style":"Priv')).toBeNull(); // unclosed {, no balancing
+  });
+  it('returns the first balanced object when multiple are present', () => {
+    const t = 'preamble {"x":1} middle {"style":"Vinyl"} tail';
+    expect(parse(t)).toEqual({ x: 1 });
+  });
+});

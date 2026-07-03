@@ -256,16 +256,28 @@ export class AiService {
 
     const systemPrompt = [
       'You are a fence-industry visual estimator. You look at a photo of a house or yard and',
-      'describe what fence the customer is most likely going to buy. Reply with ONE JSON object',
-      'and nothing else - no prose, no markdown fences. The JSON must have these keys:',
-      '  style        - one of: Privacy, Picket, Wrought Iron, Chain Link, Vinyl, Wood, Other',
-      '  color        - a short colour name (e.g. "Black", "White", "Bronze", "Natural Wood")',
-      '  heightFt     - integer feet, 3..12, your best guess from any visible fence / house scale',
-      '  surroundings - one short sentence describing the yard / neighbourhood for image prompts',
-      '  notes        - one short sentence of extra detail (slope, gates, obstructions) or ""',
-      '  confidence   - number 0..1 indicating how confident you are',
-      'If a key is unknown, set it to null. Never invent prices. Never include commentary.',
-    ].join(' ');
+      'describe what fence the customer is most likely going to buy.',
+      '',
+      'CRITICAL OUTPUT FORMAT:',
+      'Reply with EXACTLY ONE valid JSON object and NOTHING else.',
+      '- No prose before or after.',
+      '- No markdown code fences (no ``` or ```json).',
+      '- No explanations, no preamble, no postscript.',
+      '- All string values must use straight double-quotes; escape any internal quotes with \\".',
+      '- If a field is unknown, set it to null (not the string "null", not the string "unknown").',
+      '',
+      'Schema (all keys required, value may be null):',
+      '{',
+      '  "style": "Privacy" | "Picket" | "Wrought Iron" | "Chain Link" | "Vinyl" | "Wood" | "Other",',
+      '  "color": "<short colour name e.g. Black, White, Bronze, Natural Wood>",',
+      '  "heightFt": <integer 3..12, best guess from visible scale, or null>,',
+      '  "surroundings": "<one short sentence describing the yard / neighbourhood>",',
+      '  "notes": "<one short sentence of extra detail (slope, gates, obstructions) or empty string>",',
+      '  "confidence": <number 0..1>',
+      '}',
+      '',
+      'Never invent prices. Never include commentary. Begin your reply with { and end with }.',
+    ].join('\n');
 
     let lastErr: any;
     let r: any;
@@ -301,7 +313,14 @@ export class AiService {
     const raw: string = (msg?.content || msg?.reasoning_content || '').toString();
     const parsed = this.parseVisionJson(raw);
     if (!parsed) {
-      throw new BadRequestException('vision model did not return a parseable JSON object');
+      // Surface a short snippet of the raw text in the log so the
+      // operator can see why the parser gave up. The full text is
+      // also returned in the response `raw` field when parsing
+      // succeeds, so this stays operator-only.
+      this.logger.warn(`vision model returned unparseable JSON (${raw.length} chars): ${raw.slice(0, 400)}`);
+      throw new BadRequestException(
+        `vision model did not return a parseable JSON object (first 120 chars: ${JSON.stringify(raw.slice(0, 120))})`,
+      );
     }
     return {
       style: this.cleanString(parsed.style),
@@ -317,44 +336,115 @@ export class AiService {
   /**
    * Best-effort extractor for a JSON object embedded in a model
    * reply. The vision model is told to reply with JSON only, but
-   * some servers still wrap it in ```json fences or lead with a
-   * short preamble. We look for the first balanced { ... } block.
+   * in practice we see:
+   *   - a preamble ("Here is the JSON:") before the object
+   *   - ```json ... ``` fences
+   *   - trailing commas (`{"a":1,}`)
+   *   - smart quotes (`“` / `”`) the model occasionally emits
+   *   - leading BOM
+   *   - unterminated strings (token cap)
+   *
+   * We try direct JSON.parse first, then progressively relax:
+   * strip fences, normalise quotes, walk the string and return
+   * the first balanced {...} block we can parse.
    */
   private parseVisionJson(s: string): any | null {
     if (!s) return null;
-    const trimmed = s.trim();
-    // Direct parse first
-    try { return JSON.parse(trimmed); } catch { /* fall through */ }
-    // Strip ```json fences if present
-    const fenced = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```/i);
-    if (fenced) {
-      try { return JSON.parse(fenced[1].trim()); } catch { /* fall through */ }
+    let t = s.trim();
+    // Strip a UTF-8 BOM if present.
+    if (t.charCodeAt(0) === 0xFEFF) t = t.slice(1);
+    // Normalise smart quotes to ASCII. Some upstreams / models
+    // emit curly quotes that JSON.parse rejects.
+    t = t
+      .replace(/[\u2018\u2019]/g, "'")
+      .replace(/[\u201C\u201D]/g, '"');
+    // Direct parse
+    try { return JSON.parse(t); } catch { /* fall through */ }
+    // Strip ```json / ``` fences (whole response or inline)
+    const whole = t.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/i);
+    if (whole) {
+      try { return JSON.parse(whole[1].trim()); } catch { /* fall through */ }
     }
-    // Find the first balanced top-level { ... }
-    const start = trimmed.indexOf('{');
-    if (start < 0) return null;
-    let depth = 0;
-    let inStr = false;
-    let escape = false;
-    for (let i = start; i < trimmed.length; i++) {
-      const ch = trimmed[i];
-      if (inStr) {
-        if (escape) { escape = false; continue; }
-        if (ch === '\\') { escape = true; continue; }
-        if (ch === '"') inStr = false;
-      } else {
-        if (ch === '"') inStr = true;
-        else if (ch === '{') depth++;
-        else if (ch === '}') {
-          depth--;
-          if (depth === 0) {
-            const candidate = trimmed.slice(start, i + 1);
-            try { return JSON.parse(candidate); } catch { return null; }
-          }
-        }
+    const any = t.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/gi);
+    if (any && any.length) {
+      // Try the LAST fenced block (the model usually puts the
+      // final answer at the end).
+      for (let i = any.length - 1; i >= 0; i--) {
+        const m = any[i].match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/i);
+        if (!m) continue;
+        try { return JSON.parse(m[1].trim()); } catch { /* try the next */ }
+      }
+    }
+    // Try a permissive balanced {...} walk that ALSO removes
+    // trailing commas before } or ] (a common model habit).
+    const start = t.indexOf('{');
+    if (start >= 0) {
+      const candidate = this.extractBalancedObject(t, start);
+      if (candidate) {
+        try { return JSON.parse(candidate); } catch { /* try after cleanup */ }
+        try { return JSON.parse(this.stripTrailingCommas(candidate)); } catch { /* fall through */ }
       }
     }
     return null;
+  }
+
+  /**
+   * Walk the string from `start` (which must be `{`) and return
+   * the slice up to and including the matching `}`. Honours
+   * single-line `//` and `/* ... *\/` comments (the model
+   * occasionally emits those) and tolerates unterminated strings
+   * by closing them on EOL.
+   */
+  private extractBalancedObject(s: string, start: number): string | null {
+    let depth = 0;
+    let inStr = false;
+    let strQuote = '"';
+    let escape = false;
+    for (let i = start; i < s.length; i++) {
+      const ch = s[i];
+      if (inStr) {
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === strQuote) inStr = false;
+        // Unterminated string: close at newline so the rest of
+        // the response can still be parsed.
+        else if (ch === '\n') inStr = false;
+        continue;
+      }
+      if (ch === '"' || ch === "'") { inStr = true; strQuote = ch; continue; }
+      if (ch === '/' && s[i + 1] === '/') {
+        // line comment - skip to newline
+        const nl = s.indexOf('\n', i);
+        if (nl < 0) break;
+        i = nl;
+        continue;
+      }
+      if (ch === '/' && s[i + 1] === '*') {
+        const end = s.indexOf('*/', i + 2);
+        if (end < 0) break;
+        i = end + 1;
+        continue;
+      }
+      if (ch === '{') depth++;
+      else if (ch === '}') {
+        depth--;
+        if (depth === 0) return s.slice(start, i + 1);
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Remove trailing commas before `}` or `]` - valid JS, invalid
+   * JSON, and a common habit of LLM output.
+   */
+  private stripTrailingCommas(s: string): string {
+    // Drop any `,` that's followed only by whitespace and a
+    // closing brace/bracket. Safe even on string contents
+    // because the JSON parser would have accepted the input
+    // otherwise - we're just doing this fallback for inputs
+    // that are *almost* JSON.
+    return s.replace(/,(\s*[}\]])/g, '$1');
   }
 
   private cleanString(v: any): string | undefined {

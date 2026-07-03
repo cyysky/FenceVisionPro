@@ -225,6 +225,16 @@ describe('QuotesService - line item derivation (via create)', () => {
     expect(capturedCreateArgs.data.lineItems.create[0].unitPrice).toBe(80);
   });
 
+  it('refuses to create a quote when wholesalerId is null (admin caller)', async () => {
+    // Admins do not own quotes - the service must refuse the
+    // request with a ForbiddenException before reaching the
+    // Prisma transaction (which would crash on `wholesalerId:
+    // null`).
+    await expect(
+      svc.create(null as any, 'admin-uid', { fenceSegments: [{ x1: 0, y1: 0, x2: 1, y2: 0, lengthM: 1, productId: 'p1' }] } as any),
+    ).rejects.toThrow(/Only wholesaler users can create quotes/);
+  });
+
   it('computes tax correctly', async () => {
     prisma.product.findMany.mockResolvedValue([
       { id: 'p1', name: 'Panel', unit: 'pcs', basePrice: 100 },
