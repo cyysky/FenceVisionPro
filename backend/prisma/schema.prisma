@@ -1,0 +1,196 @@
+// FenceVisionPro data model
+// Multi-tenant: every wholesaler is a tenant. Global catalog is shared,
+// prices are tenant-overridable per product.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN            // FenceVisionPro staff (you)
+  WHOLESALER_OWNER // primary login for a wholesaler
+  WHOLESALER_STAFF // sub-user under a wholesaler
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model Wholesaler {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  contactEmail String
+  contactPhone String?
+  logoUrl      String?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  users     User[]
+  priceList PriceOverride[]
+  quotes    Quote[]
+  template  QuoteTemplate?
+}
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role     @default(WHOLESALER_STAFF)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  wholesalerId String?
+  wholesaler   Wholesaler? @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
+
+  quotesCreated Quote[] @relation("CreatedBy")
+
+  @@index([wholesalerId])
+}
+
+model Product {
+  id            String   @id @default(uuid())
+  sku           String   @unique
+  name          String
+  category      String   // e.g. "PANEL", "POST", "GATE", "ACCESSORY"
+  description   String?
+  unit          String   // "pcs", "linear_ft", "set"
+  basePrice     Decimal  @db.Decimal(12, 2)
+  heightOptions String[] // e.g. ["4ft","5ft","6ft"]
+  colorOptions  String[] // e.g. ["Black","White","Bronze"]
+  imageUrl      String?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  priceOverrides PriceOverride[]
+  lineItems      QuoteLineItem[]
+  designProducts DesignProduct[]
+}
+
+model PriceOverride {
+  id           String   @id @default(uuid())
+  wholesaler   Wholesaler @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
+  wholesalerId String
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId    String
+  price        Decimal    @db.Decimal(12, 2)
+
+  @@unique([wholesalerId, productId])
+}
+
+model Design {
+  id          String   @id @default(uuid())
+  name        String
+  style       String   // e.g. "Privacy", "Picket", "Wrought Iron"
+  description String?
+  // Path (relative to DATA_DIR) of the overlay texture / 2D asset.
+  overlayUrl  String
+  // JSON metadata for the renderer: scale, anchor, transparency, etc.
+  config      Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  designProducts DesignProduct[]
+  quotes         Quote[]
+}
+
+model DesignProduct {
+  id        String  @id @default(uuid())
+  design    Design  @relation(fields: [designId], references: [id], onDelete: Cascade)
+  designId  String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  productId String
+  // meters of fence covered by 1 unit of this product (e.g. 1 panel = 2.4m)
+  coverage  Decimal @db.Decimal(8, 2)
+
+  @@unique([designId, productId])
+}
+
+model QuoteTemplate {
+  id           String   @id @default(uuid())
+  wholesaler   Wholesaler @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
+  wholesalerId String   @unique
+  headerHtml   String?  @db.Text
+  footerHtml   String?  @db.Text
+  termsHtml    String?  @db.Text
+  accentColor  String?  // hex
+  updatedAt    DateTime @updatedAt
+}
+
+model Quote {
+  id           String   @id @default(uuid())
+  reference    String   @unique // human-friendly e.g. FVP-2026-0001
+  wholesaler   Wholesaler @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
+  wholesalerId String
+
+  customerName  String
+  customerEmail String
+  customerPhone String?
+  projectAddress String?
+  notes         String?  @db.Text
+
+  status      QuoteStatus @default(DRAFT)
+  validUntil  DateTime?
+  approvedAt  DateTime?
+  approvedSignatureUrl String?
+
+  // Floor plan: original upload + measured fence layout
+  floorPlanUrl     String?
+  floorPlanWidthM  Float?   // real-world width of the plan in meters
+  floorPlanHeightM Float?   // real-world height of the plan in meters
+  fenceSegments    Json?    // [{x1,y1,x2,y2,lengthM,productId,designId}]
+
+  selectedDesignId String?
+  selectedDesign   Design? @relation(fields: [selectedDesignId], references: [id])
+
+  renderUrl   String?  // composited preview image
+  pdfUrl      String?  // generated quotation PDF
+
+  subtotal    Decimal  @default(0) @db.Decimal(12, 2)
+  taxRate     Decimal  @default(0) @db.Decimal(5, 2)
+  taxAmount   Decimal  @default(0) @db.Decimal(12, 2)
+  total       Decimal  @default(0) @db.Decimal(12, 2)
+
+  createdById String?
+  createdBy   User?   @relation("CreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  lineItems QuoteLineItem[]
+
+  @@index([wholesalerId])
+  @@index([status])
+}
+
+model QuoteLineItem {
+  id        String  @id @default(uuid())
+  quote     Quote   @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId   String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+  productId String
+
+  description String
+  quantity    Decimal @db.Decimal(12, 2)
+  unitPrice   Decimal @db.Decimal(12, 2)
+  lineTotal   Decimal @db.Decimal(12, 2)
+
+  // Optional height/color selected for this line
+  heightOption String?
+  colorOption  String?
+
+  @@index([quoteId])
+}

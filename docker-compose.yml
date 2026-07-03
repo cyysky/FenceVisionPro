@@ -1,0 +1,59 @@
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: fvp_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: fence
+      POSTGRES_PASSWORD: fence
+      POSTGRES_DB: fencevisionpro
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fence -d fencevisionpro"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fvp_backend
+    restart: unless-stopped
+    # Non-secret defaults; AI_BASE_URL and AI_API_KEY are loaded from
+    # backend/.env (gitignored) via env_file below.
+    environment:
+      DATABASE_URL: postgresql://fence:fence@db:5432/fencevisionpro
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_EXPIRES_IN: 12h
+      DATA_DIR: /app/data
+      PORT: 3000
+    env_file:
+      - path: ./backend/.env
+        required: false
+    depends_on:
+      db: { condition: service_healthy }
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "12888:3000"
+    command: sh -c "npx prisma migrate deploy && node dist/main.js"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: fvp_frontend
+    restart: unless-stopped
+    environment:
+      VITE_API_BASE: /api
+    depends_on: [backend]
+    ports:
+      - "12889:80"
+
+volumes:
+  db_data:

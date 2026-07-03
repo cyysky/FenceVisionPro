@@ -1,0 +1,34 @@
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+*.tsbuildinfo
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# --- Environment files (NEVER commit) ---
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Keep Prisma generated client excluded
+backend/node_modules
+backend/dist
+frontend/dist
+
+# Local data and uploaded files (data/overlays is checked in)
+data/uploads/*
+data/renders/*
+data/pdfs/*
+data/signatures/*
+!data/overlays/
+!data/overlays/*.png

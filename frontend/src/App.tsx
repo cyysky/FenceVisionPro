@@ -1,0 +1,29 @@
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './lib/auth';
+import { RequireAuth } from './components/RequireAuth';
+import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
+import NewQuotePage from './pages/NewQuotePage';
+import QuoteDetailPage from './pages/QuoteDetailPage';
+import PublicApprovalPage from './pages/PublicApprovalPage';
+import ProductsPage from './pages/ProductsPage';
+import DesignsPage from './pages/DesignsPage';
+import WholesalersPage from './pages/WholesalersPage';
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/approve/:id" element={<PublicApprovalPage />} />
+        <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
+        <Route path="/quotes/new" element={<RequireAuth><NewQuotePage /></RequireAuth>} />
+        <Route path="/quotes/:id" element={<RequireAuth><QuoteDetailPage /></RequireAuth>} />
+        <Route path="/products" element={<RequireAuth><ProductsPage /></RequireAuth>} />
+        <Route path="/designs" element={<RequireAuth><DesignsPage /></RequireAuth>} />
+        <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><WholesalersPage /></RequireAuth>} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
+  );
+}
