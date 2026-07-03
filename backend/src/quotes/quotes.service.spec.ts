@@ -706,3 +706,62 @@ describe('CreateQuoteDto - segments array cap', () => {
     expect(errs).toHaveLength(0);
   });
 });
+
+describe('QuotesService - list() with filters and sort', () => {
+  // We exercise the filter and sort logic by mocking
+  // prisma.quote.findMany and inspecting the arguments. No DB
+  // calls are made.
+  let svc: QuotesService;
+  let prisma: any;
+  beforeEach(async () => {
+    prisma = {
+      quote: { findMany: jest.fn().mockResolvedValue([]) },
+    };
+    const mod = await Test.createTestingModule({
+      providers: [QuotesService, { provide: PrismaService, useValue: prisma }],
+    }).compile();
+    svc = mod.get(QuotesService);
+  });
+
+  function lastCall() { return prisma.quote.findMany.mock.calls[prisma.quote.findMany.mock.calls.length - 1][0]; }
+
+  it('wholesaler users are scoped to their own quotes', async () => {
+    await svc.list('wh-1', false);
+    expect(lastCall().where.wholesalerId).toBe('wh-1');
+  });
+  it('admins see all quotes (no wholesalerId filter)', async () => {
+    await svc.list(null, true);
+    expect(lastCall().where.wholesalerId).toBeUndefined();
+  });
+  it('applies a single status filter', async () => {
+    await svc.list('wh-1', false, { status: 'SENT' });
+    expect(lastCall().where.status).toBe('SENT');
+  });
+  it('applies a comma-separated status list as `in`', async () => {
+    await svc.list('wh-1', false, { status: 'SENT,APPROVED' });
+    expect(lastCall().where.status).toEqual({ in: ['SENT', 'APPROVED'] });
+  });
+  it('builds a search OR clause over reference/name/email', async () => {
+    await svc.list('wh-1', false, { q: 'jane' });
+    const w = lastCall().where;
+    expect(Array.isArray(w.OR)).toBe(true);
+    expect(w.OR).toHaveLength(3);
+    expect(w.OR[0].reference).toEqual({ contains: 'jane', mode: 'insensitive' });
+    expect(w.OR[1].customerName).toEqual({ contains: 'jane', mode: 'insensitive' });
+    expect(w.OR[2].customerEmail).toEqual({ contains: 'jane', mode: 'insensitive' });
+  });
+  it('maps sort=newest to orderBy.createdAt=desc', async () => {
+    await svc.list('wh-1', false, { sort: 'newest' });
+    expect(lastCall().orderBy).toEqual({ createdAt: 'desc' });
+  });
+  it('maps sort=customer to orderBy.customerName=asc', async () => {
+    await svc.list('wh-1', false, { sort: 'customer' });
+    expect(lastCall().orderBy).toEqual({ customerName: 'asc' });
+  });
+  it('caps the limit between 1 and 500', async () => {
+    await svc.list('wh-1', false, { limit: 0 });
+    expect(lastCall().take).toBe(1);
+    await svc.list('wh-1', false, { limit: 99999 });
+    expect(lastCall().take).toBe(500);
+  });
+});

@@ -20,45 +20,40 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
 
-  useEffect(() => { (async () => {
+  // Re-fetch whenever the filter or sort changes. Debounced
+  // search so we don't hammer the server on every keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => { void loadQuotes(); }, 200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, statusFilter, sort, search]);
+
+  async function loadQuotes() {
     try {
-      const { data } = await api.get('/quotes');
+      const params: any = { sort };
+      if (statusFilter !== 'ALL') params.status = statusFilter;
+      if (search.trim()) params.q = search.trim();
+      const { data } = await api.get('/quotes', { params });
       setQuotes(data);
     } catch (e: any) {
       toast.error('Failed to load quotes');
       setQuotes([]);
     }
+  }
+  useEffect(() => { (async () => {
+    await loadQuotes();
     if (user?.role === 'ADMIN') {
       try {
         const { data: w } = await api.get('/wholesalers');
         setWholesalers(w);
       } catch { /* non-fatal */ }
     }
-  })(); }, [user, toast]);
+  })(); // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.role]);
 
-  const filtered = useMemo(() => {
-    if (!quotes) return [];
-    const q = search.trim().toLowerCase();
-    let list = quotes.filter(r => {
-      if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
-      if (!q) return true;
-      return (
-        (r.reference || '').toLowerCase().includes(q) ||
-        (r.customerName || '').toLowerCase().includes(q) ||
-        (r.customerEmail || '').toLowerCase().includes(q)
-      );
-    });
-    list = [...list].sort((a, b) => {
-      switch (sort) {
-        case 'newest': return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-        case 'oldest': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-        case 'total-desc': return Number(b.total) - Number(a.total);
-        case 'total-asc': return Number(a.total) - Number(b.total);
-        case 'customer': return (a.customerName || '').localeCompare(b.customerName || '');
-      }
-    });
-    return list;
-  }, [quotes, statusFilter, search, sort]);
+  // The backend now does the filtering + sorting, so the
+  // "filtered" view is just the quotes array we received.
+  const filtered = quotes ?? [];
 
   const counts = useMemo(() => {
     if (!quotes) return { ALL: 0, DRAFT: 0, SENT: 0, APPROVED: 0, REJECTED: 0, EXPIRED: 0 };

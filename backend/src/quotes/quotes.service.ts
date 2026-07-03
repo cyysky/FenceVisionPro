@@ -51,10 +51,49 @@ export class QuotesService {
     return `FVP-${year}-${uuid().slice(0, 8).toUpperCase()}`;
   }
 
-  async list(wholesalerId: string | null, isAdmin: boolean) {
+  /**
+   * List quotes visible to this user. Admins see everything;
+   * wholesaler users see only their own. Supports optional
+   * filters: status (single or array of statuses), search
+   * (matches reference / customer name / email), and a
+   * `sort` param for the dashboard's sort dropdown.
+   *
+   * Keeping the filtering on the server means a wholesaler
+   * with thousands of quotes can still scroll the dashboard
+   * quickly. The default ordering is newest-first.
+   */
+  async list(
+    wholesalerId: string | null,
+    isAdmin: boolean,
+    opts: { status?: string; q?: string; sort?: string; limit?: number } = {},
+  ) {
+    const where: any = isAdmin ? {} : { wholesalerId: wholesalerId! };
+    if (opts.status) {
+      const statuses = opts.status.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+      if (statuses.length === 1) where.status = statuses[0];
+      else if (statuses.length > 1) where.status = { in: statuses };
+    }
+    if (opts.q) {
+      const q = opts.q.trim();
+      if (q) {
+        where.OR = [
+          { reference: { contains: q, mode: 'insensitive' } },
+          { customerName: { contains: q, mode: 'insensitive' } },
+          { customerEmail: { contains: q, mode: 'insensitive' } },
+        ];
+      }
+    }
+    const sort = opts.sort || 'newest';
+    const orderBy: any =
+      sort === 'oldest'      ? { createdAt: 'asc' } :
+      sort === 'total-desc'  ? { total: 'desc' } :
+      sort === 'total-asc'   ? { total: 'asc' } :
+      sort === 'customer'    ? { customerName: 'asc' } :
+                               { createdAt: 'desc' };
     return this.prisma.quote.findMany({
-      where: isAdmin ? {} : { wholesalerId: wholesalerId! },
-      orderBy: { createdAt: 'desc' },
+      where,
+      orderBy,
+      take: Math.min(Math.max(opts.limit ?? 200, 1), 500),
       include: { lineItems: true, selectedDesign: true },
     });
   }

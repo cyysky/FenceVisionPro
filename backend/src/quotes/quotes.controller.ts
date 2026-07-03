@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, UseGuards, UseInterceptors, UploadedFile, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Put, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
@@ -27,8 +27,13 @@ export class QuotesController {
   ) {}
 
   @Get()
-  list(@CurrentUser() u: JwtPayload) {
-    return this.svc.list(u.wholesalerId, u.role === Role.ADMIN);
+  list(@CurrentUser() u: JwtPayload, @Query() q: { status?: string; q?: string; sort?: string; limit?: string }) {
+    return this.svc.list(u.wholesalerId, u.role === Role.ADMIN, {
+      status: q?.status,
+      q: q?.q,
+      sort: q?.sort,
+      limit: q?.limit ? Number(q.limit) : undefined,
+    });
   }
 
   @Get(':id')
