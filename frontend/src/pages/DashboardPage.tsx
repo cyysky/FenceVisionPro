@@ -1,29 +1,45 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { useToast } from '../components/ui/Toast';
+import { confirm } from '../components/ui/Confirm';
+import { SkeletonRows } from '../components/ui/Skeleton';
 
 const STATUS_OPTIONS = ['ALL', 'DRAFT', 'SENT', 'APPROVED', 'REJECTED', 'EXPIRED'] as const;
 type StatusFilter = typeof STATUS_OPTIONS[number];
+type SortKey = 'newest' | 'oldest' | 'total-desc' | 'total-asc' | 'customer';
 
 export default function DashboardPage() {
   const { user, logout } = useAuth();
-  const [quotes, setQuotes] = useState<any[]>([]);
+  const toast = useToast();
+  const nav = useNavigate();
+  const [quotes, setQuotes] = useState<any[] | null>(null);
   const [wholesalers, setWholesalers] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortKey>('newest');
+
   useEffect(() => { (async () => {
-    const { data } = await api.get('/quotes');
-    setQuotes(data);
-    if (user?.role === 'ADMIN') {
-      const { data: w } = await api.get('/wholesalers');
-      setWholesalers(w);
+    try {
+      const { data } = await api.get('/quotes');
+      setQuotes(data);
+    } catch (e: any) {
+      toast.error('Failed to load quotes');
+      setQuotes([]);
     }
-  })(); }, [user]);
+    if (user?.role === 'ADMIN') {
+      try {
+        const { data: w } = await api.get('/wholesalers');
+        setWholesalers(w);
+      } catch { /* non-fatal */ }
+    }
+  })(); }, [user, toast]);
 
   const filtered = useMemo(() => {
+    if (!quotes) return [];
     const q = search.trim().toLowerCase();
-    return quotes.filter(r => {
+    let list = quotes.filter(r => {
       if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
       if (!q) return true;
       return (
@@ -32,13 +48,51 @@ export default function DashboardPage() {
         (r.customerEmail || '').toLowerCase().includes(q)
       );
     });
-  }, [quotes, statusFilter, search]);
+    list = [...list].sort((a, b) => {
+      switch (sort) {
+        case 'newest': return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        case 'oldest': return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case 'total-desc': return Number(b.total) - Number(a.total);
+        case 'total-asc': return Number(a.total) - Number(b.total);
+        case 'customer': return (a.customerName || '').localeCompare(b.customerName || '');
+      }
+    });
+    return list;
+  }, [quotes, statusFilter, search, sort]);
 
   const counts = useMemo(() => {
+    if (!quotes) return { ALL: 0, DRAFT: 0, SENT: 0, APPROVED: 0, REJECTED: 0, EXPIRED: 0 };
     const out: Record<string, number> = { ALL: quotes.length, DRAFT: 0, SENT: 0, APPROVED: 0, REJECTED: 0, EXPIRED: 0 };
     for (const q of quotes) out[q.status] = (out[q.status] || 0) + 1;
     return out;
   }, [quotes]);
+
+  async function deleteQuote(id: string, ref: string) {
+    const ok = await confirm({
+      title: 'Delete draft?',
+      message: `Quote ${ref} will be permanently deleted. This cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      await api.delete(`/quotes/${id}`);
+      setQuotes(qs => (qs || []).filter(x => x.id !== id));
+      toast.success('Draft deleted');
+    } catch (e: any) {
+      toast.error('Could not delete quote');
+    }
+  }
+
+  async function cloneQuote(id: string) {
+    try {
+      const { data } = await api.post(`/quotes/${id}/clone`);
+      toast.success('Cloned - opening new draft');
+      nav(`/quotes/${data.id}`);
+    } catch (e: any) {
+      toast.error('Could not clone quote');
+    }
+  }
 
   return (
     <div className="min-h-full">
@@ -49,65 +103,116 @@ export default function DashboardPage() {
             <span className="font-bold">FenceVisionPro</span>
           </div>
           <nav className="ml-2 sm:ml-8 flex flex-wrap gap-3 sm:gap-4 text-sm">
-            <Link to="/" className="text-slate-700 hover:text-brand-700">Quotes</Link>
-            <Link to="/products" className="text-slate-700 hover:text-brand-700">Products</Link>
-            <Link to="/designs" className="text-slate-700 hover:text-brand-700">Designs</Link>
-            {user?.role === 'ADMIN' && <Link to="/wholesalers" className="text-slate-700 hover:text-brand-700">Wholesalers</Link>}
+            <Link to="/" className="text-slate-900 font-medium">Quotes</Link>
+            <Link to="/products" className="text-slate-600 hover:text-brand-700">Products</Link>
+            <Link to="/designs" className="text-slate-600 hover:text-brand-700">Designs</Link>
+            {user?.role === 'ADMIN' && (
+              <Link to="/wholesalers" className="text-slate-600 hover:text-brand-700">Wholesalers</Link>
+            )}
           </nav>
-          <div className="ml-auto flex items-center gap-2 sm:gap-3 text-sm flex-wrap">
-            <span className="text-slate-500 hidden sm:inline">{user?.email} ({user?.role})</span>
-            <span className="text-slate-500 sm:hidden">({user?.role})</span>
+          <div className="ml-auto flex items-center gap-2 text-sm">
+            <Link to="/quotes/new" className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium">
+              + New quote
+            </Link>
+            <span className="hidden sm:inline text-slate-600">{user?.fullName || user?.email}</span>
             <ChangePasswordButton />
-            <button onClick={logout} className="px-3 py-1 border rounded">Logout</button>
+            <button onClick={logout} className="px-2 py-1 text-xs border rounded">Sign out</button>
           </div>
         </div>
       </header>
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-6 space-y-6">
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-bold">Quotes</h1>
-          <span className="text-xs text-slate-500">({filtered.length}/{quotes.length})</span>
-          <Link to="/quotes/new" className="ml-auto px-3 py-2 bg-brand-600 text-white rounded text-sm">+ New quote</Link>
-        </div>
 
-        {/* Quick status chips */}
-        <div className="flex flex-wrap gap-2 text-xs">
-          {STATUS_OPTIONS.map(s => (
-            <button
-              key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`px-2.5 py-1 rounded-full border ${statusFilter === s ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'}`}
-            >
-              {s} <span className="ml-1 opacity-70">{counts[s] || 0}</span>
-            </button>
-          ))}
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search ref, customer, email…"
-            className="ml-auto px-2 py-1 border rounded text-xs w-full sm:w-auto"
-          />
-        </div>
-
-        <div className="bg-white border rounded overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-slate-500 border-b">
-              <tr><th className="px-4 py-2">Ref</th><th>Customer</th><th>Status</th><th>Total</th><th>Created</th><th></th></tr>
-            </thead>
-            <tbody>
-              {filtered.map(q => (
-                <tr key={q.id} className="border-b last:border-0 hover:bg-slate-50">
-                  <td className="px-4 py-2 font-mono text-xs">{q.reference}</td>
-                  <td>{q.customerName}</td>
-                  <td><StatusBadge status={q.status} /></td>
-                  <td>${Number(q.total).toFixed(2)}</td>
-                  <td className="text-xs text-slate-500">{new Date(q.createdAt).toLocaleDateString()}</td>
-                  <td className="text-right pr-4"><Link to={`/quotes/${q.id}`} className="text-brand-700">Open</Link></td>
-                </tr>
-              ))}
-              {!filtered.length && <tr><td colSpan={6} className="text-center py-8 text-slate-500">No quotes match the filter.</td></tr>}
-            </tbody>
-          </table>
-        </div>
+      <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4">
+        <section className="bg-white border rounded">
+          <div className="p-3 border-b flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-semibold">Quotes</h2>
+            <span className="text-xs text-slate-500">({filtered.length}{filtered.length !== (quotes?.length || 0) ? ` of ${quotes?.length}` : ''})</span>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <input
+                value={search} onChange={e => setSearch(e.target.value)}
+                placeholder="Search reference, customer…"
+                className="px-2 py-1 border rounded text-sm w-44"
+                aria-label="Search quotes"
+              />
+              <select value={sort} onChange={e => setSort(e.target.value as SortKey)}
+                className="px-2 py-1 border rounded text-sm" aria-label="Sort quotes">
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="total-desc">Highest total</option>
+                <option value="total-asc">Lowest total</option>
+                <option value="customer">Customer A-Z</option>
+              </select>
+            </div>
+          </div>
+          <div className="p-2 border-b flex flex-wrap gap-1.5">
+            {STATUS_OPTIONS.map(s => (
+              <button key={s} onClick={() => setStatusFilter(s)}
+                className={`px-2.5 py-1 rounded-full text-xs border transition-colors ${
+                  statusFilter === s
+                    ? 'bg-brand-600 text-white border-brand-600'
+                    : 'bg-white text-slate-700 border-slate-300 hover:border-slate-400'
+                }`}>
+                {s} <span className={`ml-1 ${statusFilter === s ? 'opacity-80' : 'text-slate-400'}`}>{counts[s] || 0}</span>
+              </button>
+            ))}
+          </div>
+          {quotes === null ? (
+            <div className="p-4"><SkeletonRows rows={5} cols={6} /></div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-500 border-b">
+                  <tr>
+                    <th className="px-4 py-2">Ref</th>
+                    <th>Customer</th>
+                    <th>Status</th>
+                    <th className="text-right">Total</th>
+                    <th>Created</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(q => (
+                    <tr key={q.id} className="border-b last:border-0 hover:bg-slate-50 group">
+                      <td className="px-4 py-2 font-mono text-xs">
+                        <Link to={`/quotes/${q.id}`} className="text-brand-700 hover:underline">{q.reference}</Link>
+                      </td>
+                      <td>
+                        <div>{q.customerName}</div>
+                        {q.customerEmail && <div className="text-xs text-slate-500">{q.customerEmail}</div>}
+                      </td>
+                      <td><StatusBadge status={q.status} /></td>
+                      <td className="text-right font-medium">${Number(q.total).toFixed(2)}</td>
+                      <td className="text-xs text-slate-500">{new Date(q.createdAt).toLocaleDateString()}</td>
+                      <td className="text-right pr-4">
+                        <div className="opacity-60 group-hover:opacity-100 transition-opacity flex gap-2 justify-end">
+                          {q.status === 'DRAFT' && (
+                            <button onClick={() => deleteQuote(q.id, q.reference)}
+                              className="text-xs text-red-600 hover:underline">Delete</button>
+                          )}
+                          <button onClick={() => cloneQuote(q.id)}
+                            className="text-xs text-slate-600 hover:underline">Clone</button>
+                          <Link to={`/quotes/${q.id}`} className="text-xs text-brand-700 hover:underline">Open</Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!filtered.length && (
+                    <tr><td colSpan={6} className="text-center py-10 text-slate-500">
+                      {quotes.length === 0 ? (
+                        <div className="space-y-2">
+                          <div className="text-2xl">📋</div>
+                          <div>No quotes yet. <Link to="/quotes/new" className="text-brand-700 underline">Create your first one</Link>.</div>
+                        </div>
+                      ) : (
+                        <>No quotes match the filter. <button onClick={() => { setStatusFilter('ALL'); setSearch(''); }} className="text-brand-700 underline">Clear filter</button></>
+                      )}
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         {user?.role === 'ADMIN' && (
           <section>
@@ -123,7 +228,7 @@ export default function DashboardPage() {
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {wholesalers.slice(0, 6).map(w => (
-                  <div key={w.id} className="bg-white border rounded p-4">
+                  <div key={w.id} className="bg-white border rounded p-4 hover:border-brand-300 transition-colors">
                     <div className="font-medium">{w.name}</div>
                     <div className="text-xs text-slate-500">{w.contactEmail}</div>
                   </div>
@@ -145,7 +250,7 @@ function StatusBadge({ status }: { status: string }) {
     REJECTED: 'bg-red-100 text-red-700',
     EXPIRED: 'bg-slate-200 text-slate-600',
   };
-  return <span className={`px-2 py-0.5 rounded text-xs ${colors[status] || 'bg-slate-100'}`}>{status}</span>;
+  return <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${colors[status] || 'bg-slate-100'}`}>{status}</span>;
 }
 
 function ChangePasswordButton() {
@@ -170,7 +275,7 @@ function ChangePasswordButton() {
   }
 
   if (!open) {
-    return <button onClick={() => setOpen(true)} className="px-2 py-1 text-xs border rounded">Change password</button>;
+    return <button onClick={() => setOpen(true)} className="px-2 py-1 text-xs border rounded hidden sm:inline-block">Change password</button>;
   }
   return (
     <div className="fixed inset-0 bg-black/30 grid place-items-center z-50 p-4" onClick={() => setOpen(false)}>

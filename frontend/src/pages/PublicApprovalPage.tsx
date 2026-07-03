@@ -1,30 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
+import { useToast } from '../components/ui/Toast';
+import { Skeleton, SkeletonCard, SkeletonRows } from '../components/ui/Skeleton';
 
 const api = axios.create({ baseURL: '/api' });
 
 export default function PublicApprovalPage() {
   const { id } = useParams<{ id: string }>();
+  const toast = useToast();
   const [quote, setQuote] = useState<any>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [done, setDone] = useState(false);
   const [approvedAt, setApprovedAt] = useState<string | null>(null);
+  const [hasSignature, setHasSignature] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const drawing = useRef(false);
+  const lastPt = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => { (async () => {
     try {
       const { data } = await api.get(`/public/quotes/${id}`);
       setQuote(data);
       if (data.status === 'APPROVED') setApprovedAt(data.approvedAt || null);
-    } catch (e: any) { setErr('Quote not found or not available for review'); }
+    } catch (e: any) {
+      setErr(e?.response?.data?.message || 'Quote not found or not available for review');
+    } finally { setLoading(false); }
   })(); }, [id]);
 
   useEffect(() => {
-    // Only initialise the canvas once we have a SENT quote. The
-    // canvas would otherwise briefly flash a dashed border on every
-    // status change.
     if (quote && quote.status === 'SENT') prepareCanvas();
   }, [quote?.status]);
 
@@ -32,25 +37,27 @@ export default function PublicApprovalPage() {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d')!;
     ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, c.width, c.height);
-    ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1;
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
     ctx.strokeRect(2, 2, c.width - 4, c.height - 4);
     ctx.setLineDash([]);
   }
 
-  // Track the last point so we can draw a continuous line. Without
-  // this, every move event becomes an isolated dot, which looks
-  // nothing like a real signature.
-  const lastPt = useRef<{ x: number; y: number } | null>(null);
   function pos(e: React.MouseEvent | React.TouchEvent) {
     const c = canvasRef.current!; const r = c.getBoundingClientRect();
     const clientX = 'touches' in e ? e.touches[0].clientX : (e as any).clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : (e as any).clientY;
-    return { x: clientX - r.left, y: clientY - r.top };
+    // Convert from CSS display pixels to internal canvas pixels
+    // (the canvas displays at a different size than its 600x180
+    // internal resolution).
+    const sx = c.width / Math.max(r.width, 1);
+    const sy = c.height / Math.max(r.height, 1);
+    return { x: (clientX - r.left) * sx, y: (clientY - r.top) * sy };
   }
   function start(e: any) {
     e.preventDefault?.();
     drawing.current = true;
+    setHasSignature(true);
     const ctx = canvasRef.current!.getContext('2d')!;
     const p = pos(e);
     lastPt.current = p;
@@ -71,21 +78,14 @@ export default function PublicApprovalPage() {
     ctx.stroke();
     lastPt.current = p;
   }
-  function clearCanvas() { prepareCanvas(); }
+  function clearCanvas() { prepareCanvas(); setHasSignature(false); }
 
-  /**
-   * Heuristic: count the non-white pixels in the canvas. A real
-   * signature covers at least a couple hundred pixels; the 5000-char
-   * data-URL check we used previously was bypassable by submitting
-   * a 5000-char white PNG.
-   */
   function inkPixelCount(): number {
     const c = canvasRef.current!; if (!c) return 0;
     const ctx = c.getContext('2d')!;
     const data = ctx.getImageData(0, 0, c.width, c.height).data;
     let ink = 0;
     for (let i = 0; i < data.length; i += 4) {
-      // any pixel that isn't near-white
       if (data[i] < 200 || data[i+1] < 200 || data[i+2] < 200) ink++;
     }
     return ink;
@@ -94,6 +94,7 @@ export default function PublicApprovalPage() {
   const [showReject, setShowReject] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
+  const [approving, setApproving] = useState(false);
   function openReject() { setShowReject(s => !s); setRejectReason(''); }
   async function confirmReject() {
     setRejecting(true); setErr(null);
@@ -102,6 +103,7 @@ export default function PublicApprovalPage() {
       setDone(false);
       setQuote(r.data);
       setShowReject(false);
+      toast.success('Quote declined - the wholesaler has been notified');
     } catch (e: any) { setErr(e?.response?.data?.message || 'Could not decline the quote'); }
     finally { setRejecting(false); }
   }
@@ -109,13 +111,28 @@ export default function PublicApprovalPage() {
   async function approve() {
     const ink = inkPixelCount();
     if (ink < 200) { setErr(`Please sign before approving (only ${ink} ink pixels)`); return; }
+    setErr(null);
+    setApproving(true);
     const dataUrl = canvasRef.current!.toDataURL('image/png');
     try {
       const r = await api.post(`/public/quotes/${id}/approve`, { signatureDataUrl: dataUrl });
       setApprovedAt(r.data?.approvedAt || new Date().toISOString());
       setDone(true);
     } catch (e: any) { setErr(e?.response?.data?.message || 'Approval failed'); }
+    finally { setApproving(false); }
   }
+
+  if (loading) return (
+    <div className="min-h-full bg-slate-50">
+      <div className="bg-white border-b px-4 sm:px-6 py-3">
+        <Skeleton className="h-6 w-32" />
+      </div>
+      <div className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    </div>
+  );
 
   if (err && !quote) return (
     <div className="min-h-full grid place-items-center p-6">
@@ -123,20 +140,21 @@ export default function PublicApprovalPage() {
         <div className="text-3xl">⚠️</div>
         <h1 className="text-lg font-bold mt-2">Quote unavailable</h1>
         <p className="text-sm text-slate-600 mt-1">{err}</p>
+        <p className="text-xs text-slate-500 mt-3">If you reached this page from an email link, double-check the URL or contact your wholesaler.</p>
       </div>
     </div>
   );
-  if (!quote) return <div className="p-6">Loading…</div>;
+  if (!quote) return null;
   if (done) return (
-    <div className="min-h-full grid place-items-center p-6">
-      <div className="bg-white border rounded-xl p-8 max-w-md text-center">
-        <div className="text-4xl">✅</div>
-        <h1 className="text-xl font-bold mt-3">Quote approved</h1>
-        <p className="text-sm text-slate-600 mt-2">Thank you, {quote.customerName}. Your wholesaler has been notified.</p>
+    <div className="min-h-full grid place-items-center p-6 bg-slate-50">
+      <div className="bg-white border rounded-xl p-8 max-w-md text-center shadow-sm">
+        <div className="text-5xl">✅</div>
+        <h1 className="text-2xl font-bold mt-3">Quote approved</h1>
+        <p className="text-sm text-slate-600 mt-2">Thank you, {quote.customerName}. Your wholesaler has been notified and will be in touch to confirm next steps.</p>
         {approvedAt && <p className="text-xs text-slate-500 mt-3">Approved on {new Date(approvedAt).toLocaleString()}</p>}
-        <div className="mt-4 pt-4 border-t text-left text-sm">
+        <div className="mt-5 pt-4 border-t text-left text-sm space-y-1">
           <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-mono">{quote.reference}</span></div>
-          <div className="flex justify-between mt-1"><span className="text-slate-500">Total</span><span className="font-medium">${Number(quote.total).toFixed(2)}</span></div>
+          <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-medium">${Number(quote.total).toFixed(2)}</span></div>
         </div>
       </div>
     </div>
@@ -152,16 +170,13 @@ export default function PublicApprovalPage() {
             · Valid until {new Date(quote.validUntil).toLocaleDateString()}
           </span>
         )}
-        <span className="ml-auto text-sm">{quote.wholesaler?.name}</span>
+        <span className="ml-auto text-sm font-medium">{quote.wholesaler?.name}</span>
       </header>
       <main className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
-        {err && <div className="p-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded">{err}</div>}
+        {err && <div role="alert" className="p-3 text-sm bg-red-50 text-red-700 border border-red-200 rounded">{err}</div>}
         <section className="bg-white border rounded p-4">
-          <h2 className="font-semibold mb-2">Prepared for {quote.customerName}</h2>
+          <h2 className="font-semibold mb-1">Prepared for {quote.customerName}</h2>
           {quote.projectAddress && <div className="text-sm text-slate-600">{quote.projectAddress}</div>}
-          {quote.status === 'APPROVED' && approvedAt && (
-            <div className="mt-2 text-xs text-emerald-700">✓ Approved on {new Date(approvedAt).toLocaleString()}</div>
-          )}
         </section>
 
         {quote.renderUrl && (
@@ -171,10 +186,10 @@ export default function PublicApprovalPage() {
           </section>
         )}
 
-        <section className="bg-white border rounded">
+        <section className="bg-white border rounded overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500 border-b">
-              <tr><th className="px-4 py-2">Item</th><th>Qty</th><th>Unit</th><th>Total</th></tr>
+              <tr><th className="px-4 py-2">Item</th><th>Qty</th><th>Unit</th><th className="text-right pr-4">Total</th></tr>
             </thead>
             <tbody>
               {quote.lineItems.map((li: any, i: number) => (
@@ -186,14 +201,14 @@ export default function PublicApprovalPage() {
                   </td>
                   <td>{li.quantity}</td>
                   <td>${Number(li.unitPrice).toFixed(2)}</td>
-                  <td>${Number(li.lineTotal).toFixed(2)}</td>
+                  <td className="text-right pr-4 font-medium">${Number(li.lineTotal).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="text-sm">
-              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Subtotal</td><td>${Number(quote.subtotal).toFixed(2)}</td></tr>
-              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Tax ({quote.taxRate}%)</td><td>${Number(quote.taxAmount).toFixed(2)}</td></tr>
-              <tr className="font-bold"><td colSpan={3} className="px-4 py-2 text-right">Total</td><td className="px-4">${Number(quote.total).toFixed(2)}</td></tr>
+              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Subtotal</td><td className="text-right pr-4">${Number(quote.subtotal).toFixed(2)}</td></tr>
+              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Tax ({quote.taxRate}%)</td><td className="text-right pr-4">${Number(quote.taxAmount).toFixed(2)}</td></tr>
+              <tr className="font-bold text-base"><td colSpan={3} className="px-4 py-2 text-right">Total</td><td className="text-right pr-4">${Number(quote.total).toFixed(2)}</td></tr>
             </tfoot>
           </table>
         </section>
@@ -223,18 +238,26 @@ export default function PublicApprovalPage() {
         {quote.status === 'SENT' && (
           <section className="bg-white border rounded p-4">
             <h2 className="font-semibold mb-2">Sign to approve</h2>
-            <p className="text-xs text-slate-500 mb-2">Sign in the box below. Your signature is saved with this quote and shared with the wholesaler.</p>
-            <canvas
-              ref={canvasRef}
-              width={600} height={180}
-              className="border rounded w-full touch-none bg-white"
-              onMouseDown={start} onMouseUp={end} onMouseMove={draw} onMouseLeave={end}
-              onTouchStart={start} onTouchEnd={end} onTouchMove={draw}
-            />
-            <div className="flex flex-wrap items-center mt-2 gap-2">
+            <p className="text-xs text-slate-500 mb-2">Sign in the box below using your mouse, finger, or stylus. Your signature is saved with this quote.</p>
+            <div className="border-2 border-dashed border-slate-300 rounded-lg bg-white">
+              <canvas
+                ref={canvasRef}
+                width={600} height={180}
+                aria-label="Signature pad"
+                className="w-full touch-none rounded-lg"
+                onMouseDown={start} onMouseUp={end} onMouseMove={draw} onMouseLeave={end}
+                onTouchStart={start} onTouchEnd={end} onTouchMove={draw}
+              />
+            </div>
+            {!hasSignature && (
+              <p className="text-xs text-slate-500 mt-2 text-center">✍ Sign here</p>
+            )}
+            <div className="flex flex-wrap items-center mt-3 gap-2">
               <button onClick={clearCanvas} className="px-3 py-1.5 border rounded text-sm">Clear signature</button>
               <button onClick={openReject} className="px-3 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50">Decline this quote</button>
-              <button onClick={approve} className="ml-auto px-3 py-1.5 bg-emerald-600 text-white rounded text-sm">Approve quotation</button>
+              <button onClick={approve} disabled={approving} className="ml-auto px-4 py-2 bg-emerald-600 text-white rounded text-sm font-medium disabled:opacity-50">
+                {approving ? 'Approving…' : '✓ Approve quotation'}
+              </button>
             </div>
           </section>
         )}

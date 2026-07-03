@@ -1,115 +1,142 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, apiErrorMessage } from '../lib/api';
 import { AiControls } from '../components/AiControls';
+import { useToast } from '../components/ui/Toast';
+import { confirm } from '../components/ui/Confirm';
+import { Skeleton, SkeletonRows } from '../components/ui/Skeleton';
+
+const STATUSES = ['DRAFT', 'SENT', 'APPROVED', 'REJECTED', 'EXPIRED'] as const;
 
 export default function QuoteDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const toast = useToast();
   const [quote, setQuote] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [savingRender, setSavingRender] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [validUntilDate, setValidUntilDate] = useState<string>('');
 
   useEffect(() => { (async () => {
-    const { data } = await api.get(`/quotes/${id}`);
-    setQuote(data);
+    setLoading(true);
+    try {
+      const { data } = await api.get(`/quotes/${id}`);
+      setQuote(data);
+      if (data.validUntil) setValidUntilDate(data.validUntil.slice(0, 10));
+    } catch (e: any) {
+      setLoadErr(apiErrorMessage(e, 'Failed to load quote'));
+    } finally { setLoading(false); }
   })(); }, [id]);
 
   async function refresh() {
-    const { data } = await api.get(`/quotes/${id}`);
-    setQuote(data);
+    try {
+      const { data } = await api.get(`/quotes/${id}`);
+      setQuote(data);
+      if (data.validUntil) setValidUntilDate(data.validUntil.slice(0, 10));
+    } catch (e: any) { toast.error('Could not refresh'); }
   }
 
   async function generatePdf() {
-    setErr(null);
+    setBusy('pdf');
     try {
       const { data } = await api.get(`/quotes/${id}/pdf`);
       setPdfUrl(data.url);
-    } catch (e: any) { setErr(e?.response?.data?.message || 'PDF generation failed'); }
+      toast.success('PDF generated');
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'PDF generation failed')); }
+    finally { setBusy(null); }
   }
 
   async function sendToCustomer() {
-    setErr(null);
+    if (!(await confirm({
+      title: 'Send to customer?',
+      message: 'This generates a public approval link. The customer can then view, approve, or decline the quote online.',
+      confirmLabel: 'Send',
+    }))) return;
+    setBusy('send');
     try {
       await api.put(`/quotes/${id}/status`, { status: 'SENT' });
       await refresh();
-    } catch (e: any) { setErr(e?.response?.data?.message || 'Send failed'); }
+      toast.success('Quote sent - share the approval link below');
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Send failed')); }
+    finally { setBusy(null); }
   }
+
   async function deleteQuote() {
-    if (!confirm('Delete this draft? This cannot be undone.')) return;
-    await api.delete(`/quotes/${id}`);
-    window.location.href = '/';
+    if (!(await confirm({
+      title: 'Delete draft?',
+      message: 'This draft will be permanently deleted. This cannot be undone.',
+      confirmLabel: 'Delete',
+      variant: 'danger',
+    }))) return;
+    try {
+      await api.delete(`/quotes/${id}`);
+      toast.success('Draft deleted');
+      window.location.href = '/';
+    } catch (e: any) { toast.error('Could not delete quote'); }
   }
+
   async function ownerReject() {
     const reason = prompt('Optional reason (visible to your team):');
-    if (reason === null) return; // cancelled
-    setErr(null);
+    if (reason === null) return;
+    setBusy('reject');
     try {
       await api.post(`/quotes/${id}/reject`, { reason });
       await refresh();
-    } catch (e: any) { setErr(e?.response?.data?.message || 'Could not decline the quote'); }
+      toast.success('Quote declined');
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Could not decline the quote')); }
+    finally { setBusy(null); }
   }
 
   async function cloneQuote() {
-    setErr(null);
+    setBusy('clone');
     try {
       const { data } = await api.post(`/quotes/${id}/clone`);
+      toast.success('Cloned - opening new draft');
       window.location.href = `/quotes/${data.id}`;
-    } catch (e: any) { setErr(e?.response?.data?.message || 'Clone failed'); }
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Clone failed')); }
+    finally { setBusy(null); }
   }
 
   async function setStatus(status: 'DRAFT' | 'EXPIRED' | 'SENT') {
-    setErr(null);
+    setBusy(status);
     try {
       await api.put(`/quotes/${id}/status`, { status });
       await refresh();
-    } catch (e: any) { setErr(e?.response?.data?.message || 'Status change failed'); }
+      toast.success(`Status changed to ${status}`);
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Status change failed')); }
+    finally { setBusy(null); }
   }
 
-  /**
-   * Persist an AI-generated render URL onto the quote. This is the
-   * missing piece from the previous "setRender only updates local
-   * state" behaviour - now we have PATCH /quotes/:id and we use it.
-   */
   async function persistRender(url: string) {
-    setSavingRender(true);
     try {
       await api.patch(`/quotes/${id}`, { renderUrl: url });
       setQuote((q: any) => ({ ...q, renderUrl: url }));
-    } catch (e: any) {
-      setErr(e?.response?.data?.message || 'Could not save render');
-    } finally { setSavingRender(false); }
+      toast.success('Render saved to this quote');
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Could not save render')); }
   }
 
-  /**
-   * Persist the LLM-generated three.js code onto the quote so
-   * the 3D preview survives a page refresh. Best-effort: a
-   * failure here doesn't block the UI.
-   */
   async function persistCode(code: string) {
     try {
       await api.patch(`/quotes/${id}`, { threeJsCode: code });
       setQuote((q: any) => ({ ...q, threeJsCode: code }));
-    } catch {
-      /* best-effort */
-    }
+    } catch { /* best-effort */ }
   }
 
   async function copyLink() {
     const link = `${window.location.origin}/approve/${quote.id}`;
     try {
       await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
     } catch {
-      // Fallback for older browsers / non-https
       const el = document.createElement('textarea');
-      el.value = link;
-      document.body.appendChild(el); el.select();
-      try { document.execCommand('copy'); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+      el.value = link; document.body.appendChild(el); el.select();
+      try { document.execCommand('copy'); } catch { /* ignore */ }
       document.body.removeChild(el);
     }
+    setCopied(true);
+    toast.success('Approval link copied to clipboard');
+    setTimeout(() => setCopied(false), 1500);
   }
 
   async function setValidUntil(days: number | null) {
@@ -117,13 +144,39 @@ export default function QuoteDetailPage() {
     try {
       await api.patch(`/quotes/${id}`, { validUntil: value });
       await refresh();
-    } catch (e: any) { setErr(e?.response?.data?.message || 'Could not set validUntil'); }
+      toast.success(days == null ? 'Expiry cleared' : `Expires in ${days} days`);
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Could not set validUntil')); }
   }
 
-  if (!quote) return <div className="p-6">Loading…</div>;
-  const approvalLink = `${window.location.origin}/approve/${quote.id}`;
+  async function setValidUntilCustom(dateStr: string) {
+    if (!dateStr) return;
+    try {
+      const iso = new Date(dateStr + 'T23:59:59').toISOString();
+      await api.patch(`/quotes/${id}`, { validUntil: iso });
+      await refresh();
+      toast.success(`Expires on ${dateStr}`);
+    } catch (e: any) { toast.error(apiErrorMessage(e, 'Could not set validUntil')); }
+  }
 
-  // Derive AI params from the line items + selected design
+  if (loading) return (
+    <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4">
+      <Skeleton className="h-8 w-1/3" />
+      <Skeleton className="h-4 w-1/2" />
+      <SkeletonRows rows={4} cols={3} />
+    </div>
+  );
+  if (loadErr || !quote) return (
+    <div className="min-h-full grid place-items-center p-6">
+      <div className="bg-white border rounded p-6 max-w-md text-center">
+        <div className="text-3xl">⚠️</div>
+        <h1 className="text-lg font-bold mt-2">Quote unavailable</h1>
+        <p className="text-sm text-slate-600 mt-1">{loadErr || 'Quote not found'}</p>
+        <Link to="/" className="mt-3 inline-block text-brand-700 underline text-sm">← Back to dashboard</Link>
+      </div>
+    </div>
+  );
+
+  const approvalLink = `${window.location.origin}/approve/${quote.id}`;
   const designStyle = quote.selectedDesign?.name?.toLowerCase().includes('picket') ? 'Picket'
     : quote.selectedDesign?.name?.toLowerCase().includes('wrought') ? 'Wrought Iron'
     : 'Privacy';
@@ -137,62 +190,86 @@ export default function QuoteDetailPage() {
   const isDraft = quote.status === 'DRAFT';
   const isSent = quote.status === 'SENT' || quote.status === 'APPROVED';
   const isExpired = quote.status === 'EXPIRED';
+  const isFinal = quote.status === 'APPROVED' || quote.status === 'REJECTED' || quote.status === 'EXPIRED';
 
   return (
-    <div className="min-h-full">
-      <header className="bg-white border-b px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-        <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">&larr; Back</Link>
-        <h1 className="font-bold">{quote.reference}</h1>
-        <span className="text-sm text-slate-500">{quote.status}</span>
-        {quote.validUntil && (
-          <span className="text-xs text-slate-500">
-            · valid until {new Date(quote.validUntil).toLocaleDateString()}
-          </span>
-        )}
-        <div className="ml-auto flex flex-wrap gap-2">
-          <button onClick={cloneQuote} className="px-3 py-1.5 border border-slate-300 rounded text-sm hover:bg-slate-50">Clone as new draft</button>
-          {quote.status === 'SENT' && (
-            <button onClick={ownerReject} className="px-3 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50">Mark as declined</button>
-          )}
-          {isDraft && (
-            <button onClick={sendToCustomer} className="px-3 py-1.5 border rounded text-sm">Send to customer</button>
-          )}
-          <button onClick={generatePdf} className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm">Generate PDF</button>
-          {isDraft && (
-            <button onClick={deleteQuote} className="px-3 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50">Delete</button>
-          )}
+    <div className="min-h-full bg-slate-50">
+      <header className="bg-white border-b">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
+          <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
+          <span className="font-mono text-sm text-slate-500">{quote.reference}</span>
+          <StatusBadge status={quote.status} />
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {isDraft && (
+              <>
+                <button onClick={() => setStatus('SENT')} disabled={busy !== null}
+                  className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium disabled:opacity-50">
+                  {busy === 'SENT' ? 'Sending…' : '📤 Send to customer'}
+                </button>
+                <button onClick={deleteQuote} className="px-2 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50">Delete draft</button>
+              </>
+            )}
+            {isSent && (
+              <button onClick={ownerReject} disabled={busy !== null}
+                className="px-2 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50 disabled:opacity-50">
+                {busy === 'reject' ? '…' : 'Decline for customer'}
+              </button>
+            )}
+            {isExpired && (
+              <button onClick={() => setStatus('DRAFT')} disabled={busy !== null}
+                className="px-3 py-1.5 border rounded text-sm hover:bg-slate-50 disabled:opacity-50">
+                Revive as draft
+              </button>
+            )}
+            <button onClick={cloneQuote} disabled={busy !== null}
+              className="px-2 py-1.5 border rounded text-sm hover:bg-slate-50 disabled:opacity-50">
+              {busy === 'clone' ? '…' : 'Clone'}
+            </button>
+          </div>
         </div>
       </header>
-      <main className="max-w-4xl mx-auto p-4 sm:p-6 space-y-4">
-        {err && <div className="p-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded">{err}</div>}
 
+      <main className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4">
         <section className="bg-white border rounded p-4">
-          <h2 className="font-semibold mb-2">Customer</h2>
-          <div className="text-sm">
-            <span className="font-medium">{quote.customerName || '(no name)'}</span>
-            {quote.customerEmail && <> &middot; {quote.customerEmail}</>}
-            {quote.customerPhone && <> &middot; {quote.customerPhone}</>}
-          </div>
-          {quote.projectAddress && <div className="text-sm text-slate-600">{quote.projectAddress}</div>}
-          {isSent && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
-              <span className="text-slate-500">Quote expires in:</span>
-              {[7, 14, 30].map(d => (
-                <button key={d} onClick={() => setValidUntil(d)} className="px-2 py-0.5 border rounded text-xs hover:bg-slate-50">
-                  {d} days
-                </button>
-              ))}
-              {quote.validUntil && (
-                <button onClick={() => setValidUntil(null)} className="px-2 py-0.5 border rounded text-xs hover:bg-slate-50 text-slate-500">
-                  clear
-                </button>
-              )}
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div>
+              <div className="font-semibold text-lg">{quote.customerName || '(no name)'}</div>
+              {quote.customerEmail && <div className="text-sm text-slate-600">{quote.customerEmail}</div>}
+              {quote.customerPhone && <div className="text-sm text-slate-600">{quote.customerPhone}</div>}
+              {quote.projectAddress && <div className="text-sm text-slate-600 mt-1">{quote.projectAddress}</div>}
             </div>
-          )}
-          {isExpired && (
-            <div className="mt-3 flex items-center gap-2 text-sm">
-              <span className="text-slate-500">This quote has expired.</span>
-              <button onClick={() => setStatus('DRAFT')} className="px-2 py-0.5 border rounded text-xs hover:bg-slate-50">Revive as draft</button>
+            <StatusTimeline status={quote.status} createdAt={quote.createdAt} sentAt={quote.sentAt} approvedAt={quote.approvedAt} rejectedAt={quote.rejectedAt} />
+          </div>
+
+          {isSent && (
+            <div className="mt-4 pt-3 border-t">
+              <div className="text-sm font-medium mb-2">Quote expiry</div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-slate-500">Expires:</span>
+                {[7, 14, 30, 60].map(d => (
+                  <button key={d} onClick={() => setValidUntil(d)} disabled={busy !== null}
+                    className="px-2 py-0.5 border rounded text-xs hover:bg-slate-50 disabled:opacity-50">
+                    {d} days
+                  </button>
+                ))}
+                <span className="text-slate-400 text-xs">or</span>
+                <input type="date" value={validUntilDate} disabled={busy !== null}
+                  onChange={e => setValidUntilDate(e.target.value)}
+                  onBlur={e => e.target.value && setValidUntilCustom(e.target.value)}
+                  className="px-2 py-1 border rounded text-xs" />
+                {quote.validUntil && (
+                  <button onClick={() => setValidUntil(null)} disabled={busy !== null}
+                    className="px-2 py-0.5 border rounded text-xs text-slate-500 hover:bg-slate-50 disabled:opacity-50">
+                    clear
+                  </button>
+                )}
+                {quote.validUntil && (
+                  <span className="text-xs text-slate-500 ml-auto">
+                    currently: {new Date(quote.validUntil).toLocaleDateString()}
+                    {new Date(quote.validUntil).getTime() < Date.now() && <span className="text-red-600 ml-1">(expired)</span>}
+                  </span>
+                )}
+              </div>
             </div>
           )}
         </section>
@@ -201,13 +278,14 @@ export default function QuoteDetailPage() {
           <section className="bg-white border rounded p-4">
             <h2 className="font-semibold mb-2">Rendered preview</h2>
             <img src={quote.renderUrl} alt="Render" className="w-full rounded border" />
-            {savingRender && <div className="text-xs text-slate-500 mt-1">Saving…</div>}
           </section>
         )}
 
         <section className="bg-white border rounded p-4">
           <h2 className="font-semibold mb-2">AI visualisation</h2>
-          <p className="text-xs text-slate-500 mb-3">Regenerate a photorealistic image or a 3D scene. The image will be saved to this quote automatically.</p>
+          <p className="text-xs text-slate-500 mb-3">
+            Regenerate a photorealistic image or a 3D scene. Both are saved to this quote automatically.
+          </p>
           <AiControls
             quoteId={quote.id}
             style={designStyle}
@@ -220,10 +298,10 @@ export default function QuoteDetailPage() {
           />
         </section>
 
-        <section className="bg-white border rounded">
+        <section className="bg-white border rounded overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500 border-b">
-              <tr><th className="px-4 py-2">Item</th><th>Qty</th><th>Unit</th><th>Total</th></tr>
+              <tr><th className="px-4 py-2">Item</th><th>Qty</th><th>Unit</th><th className="text-right pr-4">Total</th></tr>
             </thead>
             <tbody>
               {quote.lineItems.map((li: any) => (
@@ -235,38 +313,106 @@ export default function QuoteDetailPage() {
                   </td>
                   <td>{Number(li.quantity)}</td>
                   <td>${Number(li.unitPrice).toFixed(2)}</td>
-                  <td>${Number(li.lineTotal).toFixed(2)}</td>
+                  <td className="text-right pr-4 font-medium">${Number(li.lineTotal).toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot className="text-sm">
-              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Subtotal</td><td>${Number(quote.subtotal).toFixed(2)}</td></tr>
-              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Tax ({quote.taxRate}%)</td><td>${Number(quote.taxAmount).toFixed(2)}</td></tr>
-              <tr className="font-bold"><td colSpan={3} className="px-4 py-2 text-right">Total</td><td className="px-4">${Number(quote.total).toFixed(2)}</td></tr>
+              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Subtotal</td><td className="text-right pr-4">${Number(quote.subtotal).toFixed(2)}</td></tr>
+              <tr><td colSpan={3} className="px-4 py-1 text-right text-slate-500">Tax ({quote.taxRate}%)</td><td className="text-right pr-4">${Number(quote.taxAmount).toFixed(2)}</td></tr>
+              <tr className="font-bold text-base"><td colSpan={3} className="px-4 py-2 text-right">Total</td><td className="text-right pr-4">${Number(quote.total).toFixed(2)}</td></tr>
             </tfoot>
           </table>
         </section>
 
-        {pdfUrl && (
-          <section className="bg-white border rounded p-4">
-            <h2 className="font-semibold mb-2">Quotation PDF</h2>
-            <a href={pdfUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline">Open PDF in new tab</a>
-          </section>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={generatePdf} disabled={busy !== null}
+            className="px-3 py-1.5 border rounded text-sm font-medium hover:bg-slate-50 disabled:opacity-50">
+            {busy === 'pdf' ? 'Generating…' : '📄 Generate PDF'}
+          </button>
+          {pdfUrl && (
+            <a href={pdfUrl} target="_blank" rel="noreferrer" className="text-brand-700 underline text-sm">
+              Open PDF in new tab ↗
+            </a>
+          )}
+        </div>
 
-        {isSent && (
+        {isSent && !isFinal && (
           <section className="bg-white border rounded p-4">
             <h2 className="font-semibold mb-2">Customer approval link</h2>
             <div className="flex flex-wrap items-stretch gap-2">
               <code className="flex-1 min-w-0 p-2 bg-slate-50 border rounded text-xs break-all">{approvalLink}</code>
-              <button onClick={copyLink} className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm whitespace-nowrap">
-                {copied ? '✓ Copied' : 'Copy link'}
+              <button onClick={copyLink} className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm whitespace-nowrap font-medium">
+                {copied ? '✓ Copied' : '📋 Copy link'}
               </button>
             </div>
-            <p className="text-xs text-slate-500 mt-1">Send this link to the customer for online approval and signature.</p>
+            <p className="text-xs text-slate-500 mt-2">Send this link to the customer for online approval and signature.</p>
+          </section>
+        )}
+
+        {quote.status === 'APPROVED' && (
+          <section className="bg-emerald-50 border border-emerald-200 rounded p-4">
+            <h2 className="font-semibold text-emerald-800">✓ Quote approved</h2>
+            {quote.approvedAt && <p className="text-sm text-emerald-700 mt-1">on {new Date(quote.approvedAt).toLocaleString()}</p>}
+            {quote.approvedSignatureUrl && (
+              <div className="mt-2">
+                <div className="text-xs text-slate-600 mb-1">Customer signature:</div>
+                <img src={quote.approvedSignatureUrl} alt="Signature" className="bg-white border rounded max-h-24" />
+              </div>
+            )}
+          </section>
+        )}
+
+        {quote.status === 'REJECTED' && (
+          <section className="bg-red-50 border border-red-200 rounded p-4 text-sm text-red-800">
+            <h2 className="font-semibold">Quote declined</h2>
+            {quote.rejectionReason && <p className="mt-1">Reason: {quote.rejectionReason}</p>}
           </section>
         )}
       </main>
     </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    DRAFT: 'bg-slate-100 text-slate-700',
+    SENT: 'bg-amber-100 text-amber-700',
+    APPROVED: 'bg-emerald-100 text-emerald-700',
+    REJECTED: 'bg-red-100 text-red-700',
+    EXPIRED: 'bg-slate-200 text-slate-600',
+  };
+  return <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${colors[status] || 'bg-slate-100'}`}>{status}</span>;
+}
+
+/**
+ * Visual status timeline. Shows the order of status transitions
+ * (Created -> Sent -> Approved/Rejected) and highlights where
+ * the quote currently is. Falls back gracefully if some
+ * timestamps are missing.
+ */
+function StatusTimeline({ status, createdAt, sentAt, approvedAt, rejectedAt }: { status: string; createdAt: string; sentAt?: string; approvedAt?: string; rejectedAt?: string; }) {
+  const steps = [
+    { key: 'DRAFT', label: 'Created', at: createdAt },
+    { key: 'SENT', label: 'Sent', at: sentAt },
+    { key: status === 'APPROVED' ? 'APPROVED' : status === 'REJECTED' ? 'REJECTED' : status === 'EXPIRED' ? 'EXPIRED' : 'SENT', label: status === 'APPROVED' ? 'Approved' : status === 'REJECTED' ? 'Declined' : status === 'EXPIRED' ? 'Expired' : 'Awaiting', at: approvedAt || rejectedAt },
+  ];
+  return (
+    <ol className="flex items-center gap-1 text-xs" aria-label="Quote status timeline">
+      {steps.map((s, i) => {
+        const active = s.key === status;
+        const done = (s.key !== 'SENT' || sentAt) && (s.key !== 'APPROVED' || approvedAt) && (s.key !== 'REJECTED' || rejectedAt);
+        return (
+          <li key={i} className="flex items-center gap-1">
+            <div className={`w-2 h-2 rounded-full ${active ? 'bg-brand-600 ring-2 ring-brand-200' : done ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+            <span className={active ? 'font-semibold text-slate-900' : 'text-slate-500'}>
+              {s.label}
+              {s.at && <span className="text-slate-400 ml-1">{new Date(s.at).toLocaleDateString()}</span>}
+            </span>
+            {i < steps.length - 1 && <span className="text-slate-300">→</span>}
+          </li>
+        );
+      })}
+    </ol>
   );
 }

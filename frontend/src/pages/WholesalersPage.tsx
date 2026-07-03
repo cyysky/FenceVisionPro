@@ -1,6 +1,9 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, apiErrorMessage } from '../lib/api';
+import { useToast } from '../components/ui/Toast';
+import { confirm } from '../components/ui/Confirm';
+import { SkeletonRows } from '../components/ui/Skeleton';
 
 type Wholesaler = {
   id: string; name: string; slug: string; contactEmail: string; contactPhone?: string;
@@ -8,7 +11,14 @@ type Wholesaler = {
 };
 
 export default function WholesalersPage() {
-  const [list, setList] = useState<Wholesaler[]>([]);
+  const toast = useToast();
+  const [list, setList] = useState<Wholesaler[] | null>(null);
+  // Inline add-staff form (replaces the old prompt() chain).
+  const [addStaffFor, setAddStaffFor] = useState<string | null>(null);
+  const [staffDraft, setStaffDraft] = useState({ email: '', fullName: '', password: '' });
+  // Inline reset-password form.
+  const [resetFor, setResetFor] = useState<string | null>(null);
+  const [resetDraft, setResetDraft] = useState('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({ name: '', slug: '', contactEmail: '', contactPhone: '', ownerEmail: '', ownerPassword: '', ownerName: '' });
   const [msg, setMsg] = useState<string | null>(null);
@@ -36,12 +46,12 @@ export default function WholesalersPage() {
     setErr(null); setMsg(null); setBusy(true);
     try {
       const { data } = await api.post('/wholesalers', form);
-      setMsg(`Created ${data.wholesaler.name} – owner login: ${data.owner.email}`);
+      toast.success(`Created ${data.wholesaler.name} – owner login: ${data.owner.email}`);
       setForm({ name: '', slug: '', contactEmail: '', contactPhone: '', ownerEmail: '', ownerPassword: '', ownerName: '' });
       await refresh();
     } catch (e: any) {
-      const m = e?.response?.data?.message;
-      setErr(Array.isArray(m) ? m.join(', ') : m || 'Failed');
+      setErr(apiErrorMessage(e, 'Failed'));
+      toast.error(apiErrorMessage(e, 'Failed'));
     } finally { setBusy(false); }
   }
 
@@ -59,44 +69,43 @@ export default function WholesalersPage() {
    */
   async function reloadWholesaler(id: string) {
     const { data } = await api.get(`/wholesalers/${id}`);
-    setList(prev => prev.map(x => x.id === id ? { ...x, ...data } : x));
+    setList(prev => (prev || []).map(x => x.id === id ? { ...x, ...data } : x));
   }
 
-  async function addStaff(w: Wholesaler) {
-    const email = prompt('Staff email:');
-    if (!email) return;
-    const fullName = prompt('Staff full name:');
-    if (!fullName) return;
-    const password = prompt('Initial password (min 8 chars):');
-    if (!password || password.length < 8) { alert('Password must be at least 8 characters'); return; }
+  async function submitStaff(w: Wholesaler) {
+    if (!/^\S+@\S+\.\S+$/.test(staffDraft.email)) { toast.error('Valid email required'); return; }
+    if (!staffDraft.fullName.trim()) { toast.error('Full name required'); return; }
+    if (staffDraft.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
     try {
-      await api.post(`/wholesalers/${w.id}/staff`, { email, fullName, password });
+      await api.post(`/wholesalers/${w.id}/staff`, staffDraft);
       await reloadWholesaler(w.id);
+      setAddStaffFor(null);
+      setStaffDraft({ email: '', fullName: '', password: '' });
+      toast.success('Staff added');
     } catch (e: any) {
-      const m = e?.response?.data?.message;
-      alert(Array.isArray(m) ? m.join(', ') : m || 'Failed to add staff');
+      toast.error(apiErrorMessage(e, 'Failed to add staff'));
     }
   }
 
-  async function resetPassword(w: Wholesaler, staffId: string) {
-    const np = prompt('New password (min 8 chars):');
-    if (!np || np.length < 8) { alert('Password must be at least 8 characters'); return; }
+  async function submitReset(w: Wholesaler, staffId: string) {
+    if (resetDraft.length < 8) { toast.error('Password must be at least 8 characters'); return; }
     try {
-      await api.post(`/wholesalers/${w.id}/staff/${staffId}/reset-password`, { newPassword: np });
-      alert('Password reset. The user will need to log in again on their next attempt.');
+      await api.post(`/wholesalers/${w.id}/staff/${staffId}/reset-password`, { newPassword: resetDraft });
+      setResetFor(null); setResetDraft('');
+      toast.success('Password reset - user must log in again');
     } catch (e: any) {
-      const m = e?.response?.data?.message;
-      alert(Array.isArray(m) ? m.join(', ') : m || 'Failed to reset password');
+      toast.error(apiErrorMessage(e, 'Failed to reset password'));
     }
   }
 
   async function toggleStaffActive(w: Wholesaler, staffId: string, currentlyActive: boolean) {
     const action = currentlyActive ? 'deactivate' : 'reactivate';
-    if (!confirm(`${action} this staff member?`)) return;
+    if (!(await confirm({ title: `${action.charAt(0).toUpperCase() + action.slice(1)} staff?`, message: `This will ${action} the staff member's access to the system.`, confirmLabel: action.charAt(0).toUpperCase() + action.slice(1), variant: currentlyActive ? 'danger' : 'default' }))) return;
     const path = currentlyActive ? 'deactivate' : 'reactivate';
     try {
       await api.post(`/wholesalers/${w.id}/staff/${staffId}/${path}`);
       await reloadWholesaler(w.id);
+      toast.success(`Staff ${action}d`);
     } catch (e: any) {
       const m = e?.response?.data?.message;
       alert(Array.isArray(m) ? m.join(', ') : m || `Failed to ${action}`);
@@ -131,6 +140,9 @@ export default function WholesalersPage() {
           </div>
         </section>
 
+        {list === null ? (
+          <div className="bg-white border rounded p-4"><SkeletonRows rows={4} cols={5} /></div>
+        ) : (
         <section className="bg-white border rounded">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500 border-b">
@@ -139,7 +151,7 @@ export default function WholesalersPage() {
               </tr>
             </thead>
             <tbody>
-              {list.map(w => (
+              {(list || []).map(w => (
                 <Fragment key={w.id}>
                   <tr className="border-b last:border-0">
                     <td className="px-4 py-2">{w.name}</td>
@@ -162,8 +174,20 @@ export default function WholesalersPage() {
                       <td colSpan={6} className="px-4 py-3">
                         <div className="flex items-center mb-2">
                           <h3 className="text-sm font-semibold">Users ({w.users.length})</h3>
-                          <button onClick={() => addStaff(w)} className="ml-auto px-2 py-1 text-xs border rounded hover:bg-white">+ Add staff</button>
+                          <button onClick={() => { setAddStaffFor(w.id === addStaffFor ? null : w.id); setStaffDraft({ email: '', fullName: '', password: '' }); }} className="ml-auto px-2 py-1 text-xs border rounded hover:bg-white">
+                            {addStaffFor === w.id ? '× Cancel' : '+ Add staff'}
+                          </button>
                         </div>
+                        {addStaffFor === w.id && (
+                          <div className="mb-2 p-2 bg-white border rounded space-y-2">
+                            <div className="flex flex-wrap gap-2">
+                              <input className="input flex-1 min-w-32" placeholder="Full name" value={staffDraft.fullName} onChange={e => setStaffDraft(s => ({ ...s, fullName: e.target.value }))} />
+                              <input className="input flex-1 min-w-32" type="email" placeholder="Email" value={staffDraft.email} onChange={e => setStaffDraft(s => ({ ...s, email: e.target.value }))} />
+                              <input className="input flex-1 min-w-32" type="password" placeholder="Initial password (8+ chars)" value={staffDraft.password} onChange={e => setStaffDraft(s => ({ ...s, password: e.target.value }))} />
+                              <button onClick={() => submitStaff(w)} className="px-3 py-1 bg-brand-600 text-white rounded text-xs">Create</button>
+                            </div>
+                          </div>
+                        )}
                         {w.users.length === 0 ? (
                           <div className="text-xs text-slate-500">No users yet.</div>
                         ) : (
@@ -185,7 +209,15 @@ export default function WholesalersPage() {
                                   <td className="text-right py-1">
                                     {u.role !== 'ADMIN' && (
                                       <span className="space-x-2">
-                                        <button onClick={() => resetPassword(w, u.id)} className="text-brand-700 hover:underline">Reset pw</button>
+                                        {resetFor === u.id ? (
+                                          <span className="inline-flex gap-1">
+                                            <input type="password" className="input w-32 text-xs" placeholder="new pw" value={resetDraft} onChange={e => setResetDraft(e.target.value)} />
+                                            <button onClick={() => submitReset(w, u.id)} className="text-emerald-700 hover:underline">✓</button>
+                                            <button onClick={() => { setResetFor(null); setResetDraft(''); }} className="text-slate-500 hover:underline">×</button>
+                                          </span>
+                                        ) : (
+                                          <button onClick={() => { setResetFor(u.id); setResetDraft(''); }} className="text-brand-700 hover:underline">Reset pw</button>
+                                        )}
                                         <button onClick={() => toggleStaffActive(w, u.id, u.isActive !== false)} className={u.isActive === false ? 'text-emerald-700 hover:underline' : 'text-red-700 hover:underline'}>
                                           {u.isActive === false ? 'Reactivate' : 'Deactivate'}
                                         </button>
@@ -205,6 +237,7 @@ export default function WholesalersPage() {
             </tbody>
           </table>
         </section>
+        )}
       </main>
     </div>
   );

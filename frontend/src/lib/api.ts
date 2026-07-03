@@ -30,3 +30,19 @@ export function clearAuth() {
   localStorage.removeItem(USER_KEY);
   setAuthToken(null);
 }
+
+/**
+ * Pluck a human-readable error message from an axios error.
+ * Handles the various shapes NestJS class-validator returns
+ * (string, array of strings, or a ValidationPipe error
+ * object) so callers don't need to repeat the same switch.
+ */
+export function apiErrorMessage(e: any, fallback = 'Something went wrong'): string {
+  const m = e?.response?.data?.message;
+  if (Array.isArray(m)) return m.join(', ');
+  if (typeof m === 'string') return m;
+  if (e?.code === 'ERR_NETWORK') return 'Network error - check your connection';
+  if (e?.response?.status === 413) return 'File too large';
+  if (e?.response?.status === 429) return 'Too many requests - please wait a moment';
+  return fallback;
+}
