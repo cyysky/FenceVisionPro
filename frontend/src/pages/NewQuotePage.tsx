@@ -72,6 +72,36 @@ export default function NewQuotePage() {
   const colorForAi = colorOption || 'Black';
   const styleForAi = selectedDesign?.style || selectedDesign?.name || 'Privacy';
 
+  /**
+   * Pre-fill the form with the values the vision model inferred
+   * from the customer's house photo. We only set a field if the
+   * product's options list actually contains a matching value -
+   * that way we never invent an option that doesn't exist in the
+   * wholesaler's catalogue.
+   */
+  function applyVisionResult(r: { style?: string; color?: string; heightFt?: number; surroundings?: string; notes?: string }) {
+    if (r.style) {
+      // Try to match a design by its `style` field (case-insensitive).
+      const match = designs.find(d => (d.style || d.name || '').toLowerCase() === r.style!.toLowerCase());
+      if (match) setSelectedDesignId(match.id);
+    }
+    if (r.color && selectedProduct?.colorOptions?.length) {
+      const match = selectedProduct.colorOptions.find((c: string) => c.toLowerCase() === r.color!.toLowerCase());
+      if (match) setColorOption(match);
+    }
+    if (r.heightFt != null && selectedProduct?.heightOptions?.length) {
+      // heightOptions are strings like "4ft"; find one whose digits match.
+      const match = selectedProduct.heightOptions.find((h: string) => {
+        const m = h.match(/(\d+)/); return m && Number(m[1]) === r.heightFt;
+      });
+      if (match) setHeightOption(match);
+    }
+    if (r.surroundings || r.notes) {
+      const line = [r.surroundings, r.notes].filter(Boolean).join(' | ');
+      setNotes(prev => prev ? prev + '\n' + line : line);
+    }
+  }
+
   async function save(status: 'DRAFT' | 'SENT') {
     setErr(null); setBusy(true);
     try {
@@ -172,6 +202,7 @@ export default function NewQuotePage() {
                 heightFt={heightFt}
                 panelCount={Math.ceil(segments.reduce((s, x) => s + x.lengthM, 0) / 2.4)}
                 onImage={(url) => setAiImageUrl(url)}
+                onAnalyse={(r) => applyVisionResult(r)}
               />
             </div>
           </Card>

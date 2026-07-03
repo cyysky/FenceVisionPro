@@ -38,3 +38,50 @@ describe('AI response safety', () => {
     expect(text).not.toContain('THREE');
   });
 });
+
+describe('AiService - parseVisionJson (via reflection)', () => {
+  let svc: AiService;
+  beforeAll(() => { svc = Object.create(AiService.prototype); });
+  function parse(x: string) { return (svc as any).parseVisionJson(x); }
+
+  it('parses a plain JSON object', () => {
+    expect(parse('{"style":"Privacy","color":"Black","heightFt":6,"confidence":0.9}')).toEqual({
+      style: 'Privacy', color: 'Black', heightFt: 6, confidence: 0.9,
+    });
+  });
+  it('strips ```json fences', () => {
+    expect(parse('```json\n{"style":"Picket"}\n```')).toEqual({ style: 'Picket' });
+  });
+  it('extracts the first balanced object from prose-then-JSON', () => {
+    expect(parse('Here you go:\n{"style":"Wrought Iron","color":"Bronze"}')).toEqual({
+      style: 'Wrought Iron', color: 'Bronze',
+    });
+  });
+  it('handles a leading preamble and trailing whitespace', () => {
+    expect(parse('  \n answer = {"heightFt":4}\n ')).toEqual({ heightFt: 4 });
+  });
+  it('returns null for non-JSON garbage', () => {
+    expect(parse('not json at all')).toBeNull();
+  });
+  it('returns null for an unbalanced object', () => {
+    expect(parse('{"a":1')).toBeNull();
+  });
+});
+
+describe('AiService - cleanHeightFt / cleanString (via reflection)', () => {
+  let svc: AiService;
+  beforeAll(() => { svc = Object.create(AiService.prototype); });
+  it('clamps heightFt to 1..30 and rounds', () => {
+    expect((svc as any).cleanHeightFt(6)).toBe(6);
+    expect((svc as any).cleanHeightFt(6.4)).toBe(6);
+    expect((svc as any).cleanHeightFt(99)).toBeUndefined();
+    expect((svc as any).cleanHeightFt('4')).toBe(4);
+    expect((svc as any).cleanHeightFt(null)).toBeUndefined();
+  });
+  it('drops null/unknown strings', () => {
+    expect((svc as any).cleanString('Black')).toBe('Black');
+    expect((svc as any).cleanString(null)).toBeUndefined();
+    expect((svc as any).cleanString('unknown')).toBeUndefined();
+    expect((svc as any).cleanString('   ')).toBeUndefined();
+  });
+});

@@ -2,16 +2,18 @@ import { Injectable, Logger, BadRequestException, ServiceUnavailableException } 
 import { ConfigService } from '@nestjs/config';
 import OpenAI from 'openai';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { resolve } from 'path';
+import { resolveSafe } from '../storage/safe-path';
 import { v4 as uuid } from 'uuid';
 import { StorageService } from '../storage/storage.service';
 
 /**
  * Thin wrapper around an OpenAI-compatible chat/image endpoint.
  *
- * Two models are exposed:
- *  - AI_IMAGE_MODEL (default: z-image-turbo)  -> /images/generations
- *  - AI_CODE_MODEL  (default: mimo-v25-pro)   -> /chat/completions
+ * Three models are exposed:
+ *  - AI_IMAGE_MODEL  (default: z-image-turbo)   -> /images/generations
+ *  - AI_CODE_MODEL   (default: mimo-v25-pro)    -> /chat/completions (text-only)
+ *  - AI_VISION_MODEL (default: qwen3.5-397b)    -> /chat/completions (multimodal)
  *
  * The endpoint, API key and model names are all sourced from env so
  * the values live in .env (gitignored). When AI_ENABLED=false the
@@ -23,6 +25,7 @@ export class AiService {
   private client: OpenAI | null = null;
   private imageModel: string;
   private codeModel: string;
+  private visionModel: string;
   private imageSize: string;
   private imageSteps: number;
   public enabled: boolean;
@@ -33,12 +36,13 @@ export class AiService {
     const apiKey = this.config.get<string>('AI_API_KEY');
     this.imageModel = this.config.get<string>('AI_IMAGE_MODEL') || 'z-image-turbo';
     this.codeModel = this.config.get<string>('AI_CODE_MODEL') || 'mimo-v25-pro';
+    this.visionModel = this.config.get<string>('AI_VISION_MODEL') || 'qwen3.5-397b';
     this.imageSize = this.config.get<string>('AI_IMAGE_SIZE') || '1024x1024';
     this.imageSteps = Number(this.config.get('AI_IMAGE_STEPS') || 9);
 
     if (this.enabled && baseURL && apiKey) {
       this.client = new OpenAI({ baseURL, apiKey });
-      this.logger.log(`AI enabled - baseURL=${baseURL} imageModel=${this.imageModel} codeModel=${this.codeModel}`);
+      this.logger.log(`AI enabled - baseURL=${baseURL} imageModel=${this.imageModel} codeModel=${this.codeModel} visionModel=${this.visionModel}`);
     } else {
       this.logger.warn('AI disabled - set AI_ENABLED=true, AI_BASE_URL, AI_API_KEY in .env to enable');
     }
@@ -197,6 +201,183 @@ export class AiService {
       );
     }
     return { code, model: this.codeModel };
+  }
+
+  /**
+   * Look at a user-uploaded photo of a house / yard and infer the
+   * fence parameters a wholesaler would otherwise have to type by
+   * hand. Uses the multimodal chat-completions endpoint (default
+   * model: qwen3.5-397b). The image is passed inline as a
+   * data:image/...;base64,... content part so we don't need the
+   * upstream to support a public URL.
+   *
+   * Returns a normalised subset of FenceParamsDto fields. The model
+   * is told to reply with a single JSON object so the result is
+   * trivially parseable.
+   */
+  async analysePhoto(params: {
+    imageUrl?: string;       // a server-stored /static/uploads/... URL
+    imageDataUrl?: string;   // OR a data:image/...;base64,... URL
+    mimeType?: string;       // e.g. image/jpeg - used to validate the data URL
+  }): Promise<{
+    style?: string;
+    color?: string;
+    heightFt?: number;
+    surroundings?: string;
+    notes?: string;
+    confidence?: number;
+    raw?: string;
+  }> {
+    const client = this.requireClient();
+
+    // Resolve the image into a data: URL. We *always* inline the
+    // bytes so the upstream doesn't need to fetch our static
+    // server. If the caller passed a /static/... URL we read it
+    // from disk and base64-encode it.
+    let dataUrl = params.imageDataUrl;
+    if (!dataUrl) {
+      if (!params.imageUrl) {
+        throw new BadRequestException('analysePhoto requires imageUrl or imageDataUrl');
+      }
+      const dataDir = process.env.DATA_DIR || resolve(process.cwd(), 'data');
+      const absPath = resolveSafe(dataDir, params.imageUrl);
+      const buf = await fs.readFile(absPath);
+      const mime = this.sniffMime(absPath, params.mimeType);
+      dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+    }
+    if (!/^data:image\/(png|jpe?g|webp|gif);base64,/.test(dataUrl)) {
+      throw new BadRequestException('imageDataUrl must be a base64 data:image/(png|jpeg|webp|gif) URL');
+    }
+    // Some upstreams cap the inline image. 4 MB is a safe ceiling.
+    if (dataUrl.length > 4 * 1024 * 1024 * 1.37) {
+      throw new BadRequestException('image is too large for the vision model (max ~4MB)');
+    }
+
+    const systemPrompt = [
+      'You are a fence-industry visual estimator. You look at a photo of a house or yard and',
+      'describe what fence the customer is most likely going to buy. Reply with ONE JSON object',
+      'and nothing else - no prose, no markdown fences. The JSON must have these keys:',
+      '  style        - one of: Privacy, Picket, Wrought Iron, Chain Link, Vinyl, Wood, Other',
+      '  color        - a short colour name (e.g. "Black", "White", "Bronze", "Natural Wood")',
+      '  heightFt     - integer feet, 3..12, your best guess from any visible fence / house scale',
+      '  surroundings - one short sentence describing the yard / neighbourhood for image prompts',
+      '  notes        - one short sentence of extra detail (slope, gates, obstructions) or ""',
+      '  confidence   - number 0..1 indicating how confident you are',
+      'If a key is unknown, set it to null. Never invent prices. Never include commentary.',
+    ].join(' ');
+
+    let lastErr: any;
+    let r: any;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        r = await (client.chat.completions.create as any)({
+          model: this.visionModel,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: 'Analyse this customer-uploaded photo and return the JSON described in the system prompt.' },
+                { type: 'image_url', image_url: { url: dataUrl } },
+              ],
+            },
+          ],
+          max_tokens: 600,
+          temperature: 0.2,
+        });
+        break;
+      } catch (e: any) {
+        lastErr = e;
+        const status = e?.status || e?.response?.status;
+        this.logger.warn(`AI vision attempt ${attempt + 1} failed: ${status ?? ''} ${e.message?.slice(0, 200)}`);
+        if (status === 400 || status === 401) break;
+        if (attempt < 2) await new Promise(res => setTimeout(res, 1500 * (attempt + 1)));
+      }
+    }
+    if (!r) throw new ServiceUnavailableException(`AI vision failed: ${lastErr?.message || 'unknown'}`);
+
+    const msg = r.choices?.[0]?.message as any;
+    const raw: string = (msg?.content || msg?.reasoning_content || '').toString();
+    const parsed = this.parseVisionJson(raw);
+    if (!parsed) {
+      throw new BadRequestException('vision model did not return a parseable JSON object');
+    }
+    return {
+      style: this.cleanString(parsed.style),
+      color: this.cleanString(parsed.color),
+      heightFt: this.cleanHeightFt(parsed.heightFt),
+      surroundings: this.cleanString(parsed.surroundings),
+      notes: this.cleanString(parsed.notes),
+      confidence: typeof parsed.confidence === 'number' ? Math.max(0, Math.min(1, parsed.confidence)) : undefined,
+      raw,
+    };
+  }
+
+  /**
+   * Best-effort extractor for a JSON object embedded in a model
+   * reply. The vision model is told to reply with JSON only, but
+   * some servers still wrap it in ```json fences or lead with a
+   * short preamble. We look for the first balanced { ... } block.
+   */
+  private parseVisionJson(s: string): any | null {
+    if (!s) return null;
+    const trimmed = s.trim();
+    // Direct parse first
+    try { return JSON.parse(trimmed); } catch { /* fall through */ }
+    // Strip ```json fences if present
+    const fenced = trimmed.match(/```(?:json)?\s*\n([\s\S]*?)\n```/i);
+    if (fenced) {
+      try { return JSON.parse(fenced[1].trim()); } catch { /* fall through */ }
+    }
+    // Find the first balanced top-level { ... }
+    const start = trimmed.indexOf('{');
+    if (start < 0) return null;
+    let depth = 0;
+    let inStr = false;
+    let escape = false;
+    for (let i = start; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (inStr) {
+        if (escape) { escape = false; continue; }
+        if (ch === '\\') { escape = true; continue; }
+        if (ch === '"') inStr = false;
+      } else {
+        if (ch === '"') inStr = true;
+        else if (ch === '{') depth++;
+        else if (ch === '}') {
+          depth--;
+          if (depth === 0) {
+            const candidate = trimmed.slice(start, i + 1);
+            try { return JSON.parse(candidate); } catch { return null; }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  private cleanString(v: any): string | undefined {
+    if (v === null || v === undefined) return undefined;
+    const s = String(v).trim();
+    if (!s || s.toLowerCase() === 'null' || s.toLowerCase() === 'unknown') return undefined;
+    return this.sanitizeFreeText(s);
+  }
+
+  private cleanHeightFt(v: any): number | undefined {
+    if (v === null || v === undefined) return undefined;
+    const n = Number(v);
+    if (!Number.isFinite(n) || n < 1 || n > 30) return undefined;
+    return Math.round(n);
+  }
+
+  private sniffMime(absPath: string, hint?: string): string {
+    if (hint && /^image\/(png|jpe?g|webp|gif)$/i.test(hint)) return hint.toLowerCase();
+    const lower = absPath.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.gif')) return 'image/gif';
+    return 'image/jpeg';
   }
 
   private buildImagePrompt(p: { style: string; color: string; heightFt: number; surroundings?: string; extraPrompt?: string }): string {

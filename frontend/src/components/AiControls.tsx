@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { ThreeJsViewer } from './ThreeJsViewer';
 
@@ -11,6 +11,19 @@ interface Props {
   onImage?: (url: string) => void;     // called with a server-side URL (server-rendered AI image)
   onSnapshot?: (dataUrl: string) => void; // called with a data: URL when 3D snapshot is captured
   quoteId?: string;                   // if provided, the snapshot is POSTed to the backend
+  onAnalyse?: (result: AnalyseResult) => void; // vision-model inference from an uploaded photo
+}
+
+/** Shape returned by POST /ai/analyse-photo (subset we care about). */
+export interface AnalyseResult {
+  style?: string;
+  color?: string;
+  heightFt?: number;
+  surroundings?: string;
+  notes?: string;
+  confidence?: number;
+  imageUrl?: string;
+  raw?: string;
 }
 
 /**
@@ -19,7 +32,7 @@ interface Props {
  * sandboxed iframe once it loads; users can also capture the 3D
  * frame as the quote's persisted render.
  */
-export function AiControls({ style, color, heightFt, panelCount, gateCount, onImage, onSnapshot, quoteId }: Props) {
+export function AiControls({ style, color, heightFt, panelCount, gateCount, onImage, onSnapshot, quoteId, onAnalyse }: Props) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(null);
@@ -27,6 +40,9 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
   const [err, setErr] = useState<string | null>(null);
   const [snapshotBusy, setSnapshotBusy] = useState(false);
   const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null);
+  const [analyseBusy, setAnalyseBusy] = useState(false);
+  const [analyseResult, setAnalyseResult] = useState<AnalyseResult | null>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     api.get('/ai/status')
@@ -76,6 +92,33 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
     } finally { setSnapshotBusy(false); }
   }
 
+  /**
+   * Send the user-uploaded house photo to the multimodal vision
+   * model (default: qwen3.5-397b). The backend persists the file
+   * under /static/uploads and returns inferred style/color/height/
+   * surroundings. We forward the result up so the parent form can
+   * pre-fill its fields.
+   */
+  async function analysePhoto() {
+    const file = photoRef.current?.files?.[0];
+    if (!file) {
+      photoRef.current?.click();
+      return;
+    }
+    setAnalyseBusy(true); setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const { data } = await api.post('/ai/analyse-photo', fd, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setAnalyseResult(data);
+      onAnalyse?.(data);
+    } catch (e: any) {
+      setErr(e?.response?.data?.message || 'Photo analysis failed');
+    } finally { setAnalyseBusy(false); }
+  }
+
   if (enabled === null) return null;
   if (!enabled) {
     return (
@@ -97,9 +140,36 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
           className="px-3 py-1.5 bg-slate-700 text-white rounded text-sm disabled:opacity-50">
           {busy === '3d' ? 'Generating 3D scene…' : '🧊 Generate 3D scene'}
         </button>
+        <input ref={photoRef} type="file" accept="image/*" className="hidden"
+          onChange={analysePhoto} />
+        <button onClick={analysePhoto} disabled={analyseBusy}
+          className="px-3 py-1.5 bg-emerald-600 text-white rounded text-sm disabled:opacity-50">
+          {analyseBusy ? 'Analysing photo…' : '📸 Analyse photo'}
+        </button>
         {snapshotBusy && <span className="text-xs text-slate-500">saving snapshot…</span>}
         {snapshotUrl && !snapshotBusy && <span className="text-xs text-emerald-700">✓ snapshot saved</span>}
       </div>
+      {analyseResult && (
+        <div className="p-2 text-xs bg-emerald-50 border border-emerald-200 rounded space-y-1">
+          <div className="font-medium text-emerald-800">
+            Vision model inferred
+            {analyseResult.confidence != null && (
+              <> · confidence {Math.round(analyseResult.confidence * 100)}%</>
+            )}
+          </div>
+          {analyseResult.imageUrl && (
+            <img src={analyseResult.imageUrl} alt="Uploaded house photo"
+              className="w-full max-h-48 object-contain rounded border bg-white" />
+          )}
+          <ul className="text-slate-700 list-disc pl-4">
+            {analyseResult.style && <li>Style: <b>{analyseResult.style}</b></li>}
+            {analyseResult.color && <li>Color: <b>{analyseResult.color}</b></li>}
+            {analyseResult.heightFt != null && <li>Height: <b>{analyseResult.heightFt}ft</b></li>}
+            {analyseResult.surroundings && <li>Surroundings: {analyseResult.surroundings}</li>}
+            {analyseResult.notes && <li>Notes: {analyseResult.notes}</li>}
+          </ul>
+        </div>
+      )}
       {imageUrl && (
         <div>
           <div className="text-xs text-slate-500 mb-1">AI-generated preview</div>
