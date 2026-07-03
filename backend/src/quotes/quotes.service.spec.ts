@@ -35,8 +35,15 @@ describe('QuotesService - status transitions', () => {
   });
 
   async function expectTransition(from: QuoteStatus, to: QuoteStatus, allowed: boolean) {
+    // Most transitions can run on an empty quote. Transitions TO
+    // SENT need at least one segment with a product, so we
+    // attach one when needed.
+    const hasSegments = to === QuoteStatus.SENT;
     prisma.quote.findUnique.mockResolvedValue({
       id: 'q1', wholesalerId: 'w1', status: from, approvedAt: null,
+      fenceSegments: hasSegments
+        ? [{ x1: 0, y1: 0, x2: 10, y2: 0, lengthM: 10, productId: 'p1' }]
+        : [],
     });
     prisma.quote.update.mockResolvedValue({ id: 'q1', status: to });
     if (allowed) {
@@ -53,6 +60,23 @@ describe('QuotesService - status transitions', () => {
   it('blocks APPROVED -> SENT (no regression from terminal)', async () => { await expectTransition(QuoteStatus.APPROVED, QuoteStatus.SENT, false); });
   it('allows APPROVED -> EXPIRED', async () => { await expectTransition(QuoteStatus.APPROVED, QuoteStatus.EXPIRED, true); });
   it('allows REJECTED -> DRAFT (admin can revive)', async () => { await expectTransition(QuoteStatus.REJECTED, QuoteStatus.DRAFT, true); });
+
+  it('refuses DRAFT -> SENT when the quote has no segments', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      id: 'q1', wholesalerId: 'w1', status: QuoteStatus.DRAFT, approvedAt: null, fenceSegments: [],
+    });
+    await expect(svc.updateStatus('q1', 'w1', false, QuoteStatus.SENT))
+      .rejects.toThrow(/at least one fence segment/i);
+  });
+
+  it('refuses DRAFT -> SENT when no segment references a product', async () => {
+    prisma.quote.findUnique.mockResolvedValue({
+      id: 'q1', wholesalerId: 'w1', status: QuoteStatus.DRAFT, approvedAt: null,
+      fenceSegments: [{ x1: 0, y1: 0, x2: 10, y2: 0, lengthM: 10 /* no productId */ }],
+    });
+    await expect(svc.updateStatus('q1', 'w1', false, QuoteStatus.SENT))
+      .rejects.toThrow(/at least one.*product/i);
+  });
   it('blocks unknown target status', async () => { await expectTransition(QuoteStatus.DRAFT, 'NOT_A_STATUS' as any, false).catch(() => {}); });
 });
 
@@ -253,20 +277,22 @@ describe('QuotesService - line item derivation (via create)', () => {
     expect(Number(capturedCreateArgs.data.total)).toBe(108.25);
   });
 
-  it('rejects quote with no fence segments', async () => {
-    await expect(svc.create('w1', 'u1', {
+  it('allows creating a draft with no fence segments (wholesaler can finish later)', async () => {
+    // Set up the $transaction mock for THIS test (it isn't in
+    // the outer beforeEach since most create() tests reuse the
+    // larger line-item describe).
+    prisma.quote.create = jest.fn((args: any) =>
+      Promise.resolve({ id: 'q1', ...args.data, lineItems: args.data.lineItems.create }));
+    prisma.$transaction = async (fn: any) => fn({
+      product: prisma.product,
+      priceOverride: prisma.priceOverride,
+      quote: prisma.quote,
+    });
+    const out = await svc.create('w1', 'u1', {
       customerName: 'C', customerEmail: 'c@x.com',
       fenceSegments: [],
-    })).rejects.toThrow(/At least one fence segment/);
-  });
-
-  it('rejects quote with segments that have no productId', async () => {
-    await expect(svc.create('w1', 'u1', {
-      customerName: 'C', customerEmail: 'c@x.com',
-      fenceSegments: [
-        { x1: 0, y1: 0, x2: 10, y2: 0, lengthM: 10 /* no productId */ },
-      ],
-    })).rejects.toThrow(/at least one product/);
+    } as any);
+    expect(out.id).toBe('q1');
   });
 
   it('rejects quote with unknown product', async () => {

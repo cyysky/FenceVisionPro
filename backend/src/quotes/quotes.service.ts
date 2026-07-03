@@ -192,9 +192,10 @@ export class QuotesService {
     if (!wholesalerId) {
       throw new ForbiddenException('Only wholesaler users can create quotes');
     }
-    if (!dto.fenceSegments?.length) {
-      throw new BadRequestException('At least one fence segment is required to create a quote');
-    }
+    // Drafts can be created with zero segments - the wholesaler
+    // is still working on them. We only require segments when
+    // sending the quote to the customer (enforced in update /
+    // updateStatus below).
     return this.prisma.$transaction(async (tx) => {
       const productIds = Array.from(new Set([
         ...dto.fenceSegments.map(s => s.productId).filter(Boolean) as string[],
@@ -255,10 +256,9 @@ export class QuotesService {
         });
       }
 
-      if (!lineItems.length) {
-        throw new BadRequestException('Fence segments must reference at least one product');
-      }
-
+      // lineItems is only required when the input has segments.
+      // A draft can be created with zero segments; line items
+      // are derived later when the user adds segments and saves.
       const subtotal = +lineItems.reduce((s, li) => s + li.lineTotal, 0).toFixed(2);
       const taxRate = dto.taxRate ?? 0;
       const taxAmount = +(subtotal * (taxRate / 100)).toFixed(2);
@@ -299,6 +299,18 @@ export class QuotesService {
     const allowed = ALLOWED_TRANSITIONS[q.status] || [];
     if (!allowed.includes(status)) {
       throw new BadRequestException(`Cannot move quote from ${q.status} to ${status}`);
+    }
+    // Sending to the customer requires at least one fence
+    // segment with a product reference. Without it the
+    // approval page would show an empty line-items table.
+    if (status === QuoteStatus.SENT) {
+      const segs = (q.fenceSegments as any[]) || [];
+      if (!segs.length) {
+        throw new BadRequestException('Add at least one fence segment before sending to the customer');
+      }
+      if (!segs.some(s => s.productId)) {
+        throw new BadRequestException('At least one fence segment must reference a product before sending');
+      }
     }
     return this.prisma.quote.update({
       where: { id },
