@@ -68,6 +68,7 @@ export class AiService {
     heightFt: number;         // e.g. 6
     surroundings?: string;    // e.g. "suburban lawn with a two-storey house"
     extraPrompt?: string;     // user additions
+    visionDescription?: string; // from analysePhoto - spliced into prompt
   }): Promise<{ url: string; relPath: string }> {
     const client = this.requireClient();
     const prompt = this.buildImagePrompt(params);
@@ -380,21 +381,40 @@ export class AiService {
     return 'image/jpeg';
   }
 
-  private buildImagePrompt(p: { style: string; color: string; heightFt: number; surroundings?: string; extraPrompt?: string }): string {
+  private buildImagePrompt(p: {
+    style: string; color: string; heightFt: number;
+    surroundings?: string; extraPrompt?: string;
+    visionDescription?: string; // from analysePhoto
+  }): string {
     const styleMap: Record<string, string> = {
-      'Privacy': 'tall solid privacy panels with no gaps, modern',
-      'Picket': 'classic evenly-spaced vertical pickets with rounded tops',
-      'Wrought Iron': 'decorative ornamental wrought iron with finials',
+      'Privacy': 'tall solid privacy fence with overlapping tongue-and-groove vinyl or wood panels, no visible gaps, flat top, modern',
+      'Picket': 'classic residential picket fence with evenly-spaced vertical boards, rounded or pointed tops, narrow gaps between pickets',
+      'Wrought Iron': 'ornamental wrought iron or steel fence with vertical bars, decorative finials on top of each post, horizontal rails',
+      'Chain Link': 'galvanized steel chain link fence with diamond mesh pattern, metal posts and top rail',
+      'Vinyl': 'solid white or tan PVC vinyl fence panels, smooth finish, no visible seams',
+      'Wood': 'natural wood privacy fence with horizontal or vertical planks, visible wood grain, slightly weathered',
     };
-    const styleDesc = styleMap[p.style] || p.style;
-    const surroundings = this.sanitizeFreeText(p.surroundings) || 'a typical American suburban backyard, green lawn, bright midday sun';
+    const styleDesc = styleMap[p.style] || `${p.style.toLowerCase()} residential fence`;
+    const color = p.color.toLowerCase();
+    const surroundings = this.sanitizeFreeText(p.surroundings)
+      || 'a typical American suburban backyard, green grass, mature trees in the background, two-storey house partially visible';
     const extra = this.sanitizeFreeText(p.extraPrompt);
-    return [
-      `Photorealistic product photo of a ${p.heightFt}-foot tall ${p.color.toLowerCase()} ${styleDesc} residential fence`,
-      `in ${surroundings}.`,
-      'Eye-level three-quarter angle, sharp focus, no text, no people, no watermarks.',
+    // The vision model (qwen3.5-397b) produces a richer description
+    // of the property when a photo is uploaded. We splice it in
+    // verbatim so the image model has the architectural context
+    // (house colour, siding material, slope, existing landscaping)
+    // it needs to produce a faithful rendering.
+    const vision = p.visionDescription ? this.sanitizeFreeText(p.visionDescription) : '';
+    const lines = [
+      `Professional real-estate marketing photo, residential property with a ${p.heightFt}-foot tall ${color} ${styleDesc}.`,
+      `The fence is the primary subject and must be sharply in focus, with correct colour (${color}), correct height (${p.heightFt} feet), and correct style (${p.style}).`,
+      `Setting: ${surroundings}.`,
+      vision && `Property details from the customer photo: ${vision}.`,
+      'Three-quarter perspective from outside the fence looking in, eye-level camera, golden-hour late afternoon lighting, soft natural shadows, sharp focus on the fence in the foreground with gentle bokeh in the background.',
+      'No text, no labels, no watermarks, no logos, no people, no cars in the foreground, no artificial-looking renders.',
       extra,
-    ].filter(Boolean).join(' ');
+    ].filter(Boolean);
+    return lines.join(' ');
   }
 
   /**

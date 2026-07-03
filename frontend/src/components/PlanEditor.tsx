@@ -62,38 +62,55 @@ export function PlanEditor({ imageUrl, initialSegments = [], initialWidthM, init
     return { x: mx * scale, y: my * scale };
   }
 
+  /**
+   * Translate a React mouse event into the canvas's *internal*
+   * pixel coordinate system. The canvas has a fixed internal
+   * resolution (1000x600) but is rendered at whatever CSS width
+   * the parent gives it (className="w-full"), so the on-screen
+   * bounding rect can be a different size. Without this scaling
+   * factor the meter coordinates are wrong by the display-to-
+   * internal ratio, segments end up far from the user's clicks,
+   * and the second draw point can land so far from the first
+   * that the resulting segment jumps across the canvas.
+   */
   function canvasPoint(e: React.MouseEvent) {
     const c = canvasRef.current!;
     const r = c.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    const sx = c.width / Math.max(r.width, 1);
+    const sy = c.height / Math.max(r.height, 1);
+    return { x: (e.clientX - r.left) * sx, y: (e.clientY - r.top) * sy };
   }
 
   function handleClick(e: React.MouseEvent) {
-    if (!img || !scale) return;
+    if (!img) return;
     const p = canvasPoint(e);
     if (mode === 'calibrate') {
-      if (!calA) setCalA(p);
-      else if (!calB) setCalB(p);
+      // Calibration doesn't need scale - it sets scale.
+      if (!calA) { setCalA(p); return; }
+      if (!calB) { setCalB(p); return; }
       return;
     }
     if (mode === 'draw') {
+      if (!scale) return; // need calibration first
       if (!drawStart) {
         setDrawStart(p);
-      } else {
-        const a = pxToMeters(drawStart.x, drawStart.y);
-        const b = pxToMeters(p.x, p.y);
-        const lengthM = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-        const next = [...segments, { x1: a.x, y1: a.y, x2: b.x, y2: b.y, lengthM }];
-        setSegments(next);
-        setDrawStart(null);
-        // recompute plan extent
-        const xs = next.flatMap(s => [s.x1, s.x2]);
-        const ys = next.flatMap(s => [s.y1, s.y2]);
-        const w = Math.max(...xs, 0.1);
-        const h = Math.max(...ys, 0.1);
-        setPlanW(w); setPlanH(h);
-        onChange(next, w, h);
+        return;
       }
+      const a = pxToMeters(drawStart.x, drawStart.y);
+      const b = pxToMeters(p.x, p.y);
+      const lengthM = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+      // Skip degenerate clicks (double-click on the same spot).
+      if (lengthM < 0.05) { setDrawStart(p); return; }
+      const next = [...segments, { x1: a.x, y1: a.y, x2: b.x, y2: b.y, lengthM }];
+      setSegments(next);
+      setDrawStart(null);
+      // recompute plan extent
+      const xs = next.flatMap(s => [s.x1, s.x2]);
+      const ys = next.flatMap(s => [s.y1, s.y2]);
+      const w = Math.max(...xs, 0.1);
+      const h = Math.max(...ys, 0.1);
+      setPlanW(w); setPlanH(h);
+      onChange(next, w, h);
     }
   }
 
@@ -196,6 +213,14 @@ export function PlanEditor({ imageUrl, initialSegments = [], initialWidthM, init
         <button onClick={undo} disabled={!segments.length} className="px-3 py-1 rounded bg-white border disabled:opacity-50">Undo</button>
         <button onClick={clear} disabled={!segments.length} className="px-3 py-1 rounded bg-white border disabled:opacity-50">Clear</button>
         <span className="ml-auto text-slate-600">Total: <b>{totalLengthM.toFixed(2)} m</b></span>
+      </div>
+      <div className="text-xs text-slate-600 px-1">
+        {mode === 'calibrate' && !calA && 'Step 1: click the first reference point on the plan.'}
+        {mode === 'calibrate' && calA && !calB && 'Step 2: click the second reference point.'}
+        {mode === 'calibrate' && calA && calB && 'Step 3: enter the real-world distance and click Confirm.'}
+        {mode === 'draw' && !drawStart && segments.length === 0 && 'Draw mode: click the first corner of the fence.'}
+        {mode === 'draw' && drawStart && 'Click the next corner to add a segment (or click the same spot to cancel).'}
+        {mode === 'draw' && !drawStart && segments.length > 0 && 'Click the next corner to continue drawing, or use Undo / Clear.'}
       </div>
 
       <canvas

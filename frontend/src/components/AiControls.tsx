@@ -53,7 +53,15 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
   async function genImage() {
     setBusy('image'); setErr(null);
     try {
-      const { data } = await api.post('/ai/render-image', { style, color, heightFt, panelCount, gateCount });
+      // Splice in the vision-model description from a previously
+      // analysed photo (if any) so the image model has the
+      // property context it needs to produce a faithful render.
+      const visionDescription = analyseResult
+        ? [analyseResult.notes, analyseResult.surroundings].filter(Boolean).join('. ') || analyseResult.raw
+        : undefined;
+      const { data } = await api.post('/ai/render-image', {
+        style, color, heightFt, panelCount, gateCount, visionDescription,
+      });
       setImageUrl(data.url);
       onImage?.(data.url);
     } catch (e: any) {

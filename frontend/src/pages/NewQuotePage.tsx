@@ -27,6 +27,20 @@ export default function NewQuotePage() {
   const [taxRate, setTaxRate] = useState<number>(0);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Tracks a draft we already auto-saved to the backend. We use it
+  // to persist the AI-generated image as the quote's renderUrl the
+  // moment it's produced, so the image survives a page refresh.
+  const [draftId, setDraftId] = useState<string | null>(null);
+
+  // Tab-scoped persistence for the AI image. The user expects
+  // "I just generated this image" to survive a navigation back
+  // to the dashboard and a return to NewQuotePage, but not to
+  // outlive the tab.
+  const aiImageKey = 'fvp.newQuote.aiImageUrl';
+  useEffect(() => {
+    const saved = sessionStorage.getItem(aiImageKey);
+    if (saved) setAiImageUrl(saved);
+  }, []);
 
   // Inline form validation. A quote must have a customer name + email
   // and at least one fence segment to be saved. The "Save & send"
@@ -102,6 +116,24 @@ export default function NewQuotePage() {
     }
   }
 
+  /**
+   * Persist a freshly-generated AI image so it survives a page
+   * refresh or a round-trip via the dashboard. We write the URL
+   * to sessionStorage (tab-scoped) and, if the user has already
+   * saved a draft quote, we also PATCH renderUrl on the server
+   * so the image shows up the next time the quote is opened.
+   */
+  function persistAiImage(url: string) {
+    setAiImageUrl(url);
+    try { sessionStorage.setItem(aiImageKey, url); } catch { /* ignore */ }
+    if (draftId) {
+      // Best-effort: persist to the backend. We don't block the
+      // UI on this; failures just mean the URL only lives in
+      // sessionStorage.
+      api.patch(`/quotes/${draftId}`, { renderUrl: url }).catch(() => {});
+    }
+  }
+
   async function save(status: 'DRAFT' | 'SENT') {
     setErr(null); setBusy(true);
     try {
@@ -119,15 +151,33 @@ export default function NewQuotePage() {
           renderUrl = data.url;
         } catch { /* best-effort */ }
       }
-      const { data: quote } = await api.post('/quotes', {
-        customerName, customerEmail, customerPhone, projectAddress, notes,
-        selectedDesignId, floorPlanUrl, floorPlanWidthM: planW, floorPlanHeightM: planH,
-        fenceSegments: stamped, renderUrl, taxRate,
-      });
-      if (status === 'SENT') {
-        await api.put(`/quotes/${quote.id}/status`, { status: 'SENT' });
+      let quoteId = draftId;
+      if (quoteId) {
+        // Update the existing draft. We only send fields the API
+        // accepts on PATCH for a DRAFT (the backend rejects most
+        // field changes once a quote is SENT).
+        const { data: q } = await api.patch(`/quotes/${quoteId}`, {
+          customerName, customerEmail, customerPhone, projectAddress, notes,
+          selectedDesignId, floorPlanUrl, floorPlanWidthM: planW, floorPlanHeightM: planH,
+          fenceSegments: stamped, renderUrl, taxRate,
+        });
+        quoteId = q.id;
+      } else {
+        const { data: q } = await api.post('/quotes', {
+          customerName, customerEmail, customerPhone, projectAddress, notes,
+          selectedDesignId, floorPlanUrl, floorPlanWidthM: planW, floorPlanHeightM: planH,
+          fenceSegments: stamped, renderUrl, taxRate,
+        });
+        quoteId = q.id;
+        setDraftId(quoteId);
       }
-      nav(`/quotes/${quote.id}`);
+      if (status === 'SENT') {
+        await api.put(`/quotes/${quoteId}/status`, { status: 'SENT' });
+      }
+      // The render is now persisted on the quote; drop the
+      // sessionStorage copy so the next NewQuotePage starts clean.
+      try { sessionStorage.removeItem(aiImageKey); } catch { /* ignore */ }
+      nav(`/quotes/${quoteId}`);
     } catch (e: any) {
       setErr(e?.response?.data?.message || 'Failed to save quote');
     } finally {
@@ -201,7 +251,7 @@ export default function NewQuotePage() {
                 color={colorForAi}
                 heightFt={heightFt}
                 panelCount={Math.ceil(segments.reduce((s, x) => s + x.lengthM, 0) / 2.4)}
-                onImage={(url) => setAiImageUrl(url)}
+                onImage={(url) => persistAiImage(url)}
                 onAnalyse={(r) => applyVisionResult(r)}
               />
             </div>

@@ -35,10 +35,18 @@ export class AiController {
    * Render a photorealistic fence image based on design parameters.
    * Body example:
    *   { "style": "Privacy", "color": "Black", "heightFt": 6,
-   *     "surroundings": "suburban lawn", "extraPrompt": "..." }
+   *     "surroundings": "suburban lawn", "extraPrompt": "...",
+   *     "visionDescription": "..." }
+   *
+   * visionDescription is a free-text description produced by
+   * /ai/analyse-photo (the multimodal qwen3.5-397b model). When
+   * present we splice it into the image prompt so the image
+   * model has rich context about the property (siding colour,
+   * slope, landscaping) instead of guessing from the style name
+   * alone.
    */
   @Post('render-image')
-  async renderImage(@Body() dto: FenceParamsDto) {
+  async renderImage(@Body() dto: FenceParamsDto & { visionDescription?: string }) {
     if (!this.ai.enabled) throw new BadRequestException('AI is disabled');
     const { url, relPath } = await this.ai.generateFenceImage(dto);
     return { url, relPath };

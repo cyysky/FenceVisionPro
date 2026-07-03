@@ -62,6 +62,51 @@ ${code}
   el.textContent = (e && e.stack) || String(e);
   el.style.display = 'block';
 }
+
+/**
+ * Auto-attach OrbitControls. LLM-generated code is inconsistent
+ * - some snippets wire up controls, others don't. The host wants
+ * the user to always be able to drag/zoom/pan the 3D view with
+ * the mouse, regardless of what the model emitted, so we look
+ * at the global scope for any camera + renderer pair and attach
+ * controls ourselves. We do this in a microtask + a short retry
+ * loop because the LLM code may construct the camera inside an
+ * init() function that runs after this script block.
+ */
+(function() {
+  function attach() {
+    try {
+      var cam = (typeof camera !== 'undefined') ? camera : null;
+      var ren = (typeof renderer !== 'undefined') ? renderer : null;
+      if (!cam || !ren || !window.THREE || !window.THREE.OrbitControls) return false;
+      // Avoid double-attaching if the LLM code already did it.
+      if (window.__fvpControls) return true;
+      var c = new window.THREE.OrbitControls(cam, ren.domElement);
+      c.enableDamping = true;
+      c.dampingFactor = 0.08;
+      c.target.set(0, 1, 0);
+      c.update();
+      window.__fvpControls = c;
+      // Drive the render loop from the controls' change events so
+      // dragging actually updates the viewport. If the LLM code
+      // already had its own animate() loop, that's fine - controls
+      // just call cam.update() lazily and the existing loop will
+      // re-render on the next frame.
+      var tick = function() { c.update(); requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+      return true;
+    } catch (e) { return false; }
+  }
+  // Try once now, then keep trying for up to 3s in case the
+  // LLM code constructs the camera asynchronously.
+  if (!attach()) {
+    var tries = 0;
+    var iv = setInterval(function() {
+      tries++;
+      if (attach() || tries > 30) clearInterval(iv);
+    }, 100);
+  }
+})();
 </script>
 </body></html>`;
 }
@@ -131,7 +176,7 @@ export function ThreeJsViewer({ code, height = 480, onSnapshot }: Props) {
       {url && (
         <>
           <div className="bg-slate-800 text-slate-300 text-xs px-2 py-1 flex items-center justify-between gap-2 flex-wrap">
-            <span>3D preview (sandboxed - LLM-generated code runs in isolation)</span>
+            <span>3D preview · drag to orbit · scroll to zoom · right-drag to pan</span>
             <div className="flex gap-1">
               {onSnapshot && (
                 <button
