@@ -1,4 +1,4 @@
-import { IsIn, IsISO8601, IsNumber, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from "class-validator";
+import { IsIn, IsISO8601, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from "class-validator";
 import { Type, Transform } from 'class-transformer';
 
 const TrimmedNonEmpty = ({ value }: { value: unknown }) =>
@@ -28,7 +28,7 @@ export const INVOICE_TRANSITIONS: Record<InvoiceStatusLiteral, InvoiceStatusLite
 };
 
 export class CreateInvoiceDto {
-  @IsString() @Min(1) quoteId: string;
+  @IsString() @MinLength(1) quoteId: string;
   @IsOptional() @IsISO8601() dueAt?: string;
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MaxLength(2000) notes?: string;
   /**

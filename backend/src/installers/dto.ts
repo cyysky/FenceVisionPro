@@ -19,6 +19,12 @@ export class CreateInstallerDto {
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MaxLength(200) companyName?: string;
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MaxLength(2000) notes?: string;
   @IsOptional() @IsIn(['ACTIVE', 'INACTIVE']) status?: 'ACTIVE' | 'INACTIVE';
+  /**
+   * Admin-only: target dealer when creating an installer for a
+   * specific tenant. Dealer users cannot set this; their own
+   * dealerId is used implicitly.
+   */
+  @IsOptional() @IsString() @MaxLength(80) dealerId?: string;
 }
 
 export class UpdateInstallerDto {

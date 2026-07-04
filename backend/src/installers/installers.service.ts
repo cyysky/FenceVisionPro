@@ -56,14 +56,31 @@ export class InstallersService {
   async create(u: JwtPayload, dto: {
     name: string; phone?: string; email?: string;
     companyName?: string; notes?: string; status?: 'ACTIVE' | 'INACTIVE';
+    dealerId?: string;
   }) {
-    const { dealerId, isAdmin } = this.authCtx(u);
-    if (!isAdmin && !dealerId) {
-      throw new ForbiddenException('Only dealer users can create installers');
+    const { dealerId: callerDealerId, isAdmin } = this.authCtx(u);
+    // Resolve the target dealer. Dealer users are pinned to
+    // their own tenant (dealerId in the body is ignored for
+    // them). Admins must supply a dealerId in the body, or
+    // they get a 400 - we never auto-default to "the first
+    // dealer" or "null" because both are silently wrong.
+    let targetDealerId: string;
+    if (isAdmin) {
+      if (!dto.dealerId) {
+        throw new ForbiddenException('Admin must specify dealerId when creating an installer');
+      }
+      const d = await this.prisma.dealer.findUnique({ where: { id: dto.dealerId } });
+      if (!d) throw new NotFoundException('Dealer not found');
+      targetDealerId = d.id;
+    } else {
+      if (!callerDealerId) {
+        throw new ForbiddenException('Only dealer users can create installers');
+      }
+      targetDealerId = callerDealerId;
     }
     return this.prisma.installer.create({
       data: {
-        dealerId: dealerId!, // admin and dealer both have a dealerId when they're creating for someone
+        dealerId: targetDealerId,
         name: dto.name,
         phone: dto.phone ?? null,
         email: dto.email ?? null,

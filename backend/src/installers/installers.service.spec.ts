@@ -26,6 +26,9 @@ describe('InstallersService', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      dealer: {
+        findUnique: jest.fn(),
+      },
     };
     const mod = await Test.createTestingModule({
       providers: [
@@ -81,6 +84,21 @@ describe('InstallersService', () => {
   });
 
   describe('create', () => {
+    it('admin must supply a dealerId', async () => {
+      prisma.dealer.findUnique.mockResolvedValueOnce(null);
+      await expect(svc.create(admin, { name: 'X' })).rejects.toBeInstanceOf(ForbiddenException);
+    });
+    it('admin with unknown dealerId → 404', async () => {
+      prisma.dealer.findUnique.mockResolvedValueOnce(null);
+      await expect(svc.create(admin, { name: 'X', dealerId: 'dZ' })).rejects.toBeInstanceOf(NotFoundException);
+    });
+    it('admin with known dealerId creates for that dealer', async () => {
+      prisma.dealer.findUnique.mockResolvedValueOnce({ id: 'dB' });
+      prisma.installer.create.mockResolvedValueOnce({ id: 'i1', dealerId: 'dB', name: 'New' });
+      const out = await svc.create(admin, { name: 'New', dealerId: 'dB' });
+      expect(out.dealerId).toBe('dB');
+      expect(prisma.installer.create.mock.calls[0][0].data.dealerId).toBe('dB');
+    });
     it('pins the new installer to the caller dealer', async () => {
       prisma.installer.create.mockResolvedValueOnce({ id: 'i1', dealerId: 'dA', name: 'New' });
       const out = await svc.create(ownerA, { name: 'New' });
