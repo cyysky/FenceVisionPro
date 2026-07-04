@@ -82,42 +82,60 @@ export class InvoicesService {
     const tax = +(subtotal * (taxPercent / 100)).toFixed(2);
     const total = +(subtotal + tax).toFixed(2);
 
-    return this.prisma.$transaction(async (tx) => {
-      // Generate number: INV-<year>-<NNNN> per dealer. Count the
-      // dealer's existing invoices in the same year and add 1.
-      // The unique index on `number` catches any race.
-      const year = new Date().getFullYear();
-      const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
-      const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
-      const count = await tx.invoice.count({
-        where: { dealerId: quote.dealerId, createdAt: { gte: yearStart, lt: yearEnd } },
-      });
-      const number = `INV-${year}-${String(count + 1).padStart(4, '0')}`;
+    // Retry the whole transaction on number collisions. A different
+    // dealer's parallel create can land on the same per-dealer suffix.
+    // Postgres aborts the transaction on the first P2002, so we have to
+    // retry the entire block, not just the failing statement.
+    const year = new Date().getFullYear();
+    const yearStart = new Date(`${year}-01-01T00:00:00.000Z`);
+    const yearEnd = new Date(`${year + 1}-01-01T00:00:00.000Z`);
 
-      return tx.invoice.create({
-        data: {
-          dealerId: quote.dealerId,
-          quoteId: quote.id,
-          number,
-          status: InvoiceStatus.DRAFT,
-          subtotal,
-          tax,
-          total,
-          dueAt: dto.dueAt ? new Date(dto.dueAt) : null,
-          notes: dto.notes ?? null,
-          lineItems: {
-            create: quote.lineItems.map((li, idx) => ({
-              description: li.description,
-              quantity: li.quantity,
-              unitPrice: li.unitPrice,
-              total: li.lineTotal,
-              position: idx,
-            })),
-          },
-        },
-        include: { lineItems: { orderBy: { position: 'asc' } } },
-      });
-    });
+    let lastErr: any;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        return await this.prisma.$transaction(async (tx) => {
+          // Re-count inside the transaction so concurrent creates don't
+          // produce the same suffix. Bump by `attempt` so a collision
+          // from a different dealer's parallel create can be retried
+          // with a new suffix on the next loop.
+          const baseCount = await tx.invoice.count({
+            where: { dealerId: quote.dealerId, createdAt: { gte: yearStart, lt: yearEnd } },
+          });
+          const number = `INV-${year}-${String(baseCount + attempt + 1).padStart(4, '0')}`;
+
+          return tx.invoice.create({
+            data: {
+              dealerId: quote.dealerId,
+              quoteId: quote.id,
+              number,
+              status: InvoiceStatus.DRAFT,
+              subtotal,
+              tax,
+              total,
+              dueAt: dto.dueAt ? new Date(dto.dueAt) : null,
+              notes: dto.notes ?? null,
+              lineItems: {
+                create: quote.lineItems.map((li, idx) => ({
+                  description: li.description,
+                  quantity: li.quantity,
+                  unitPrice: li.unitPrice,
+                  total: li.lineTotal,
+                  position: idx,
+                })),
+              },
+            },
+            include: { lineItems: { orderBy: { position: 'asc' } } },
+          });
+        });
+      } catch (e: any) {
+        if (e?.code === 'P2002' || /current transaction is aborted/i.test(String(e?.message))) {
+          lastErr = e;
+          continue;
+        }
+        throw e;
+      }
+    }
+    throw lastErr;
   }
 
   /**
