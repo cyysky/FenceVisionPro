@@ -118,8 +118,9 @@ export default function PublicCustomerView() {
       <header className="bg-white border-b">
         <div className="max-w-2xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold text-xs">F</div>
-            <span className="font-bold text-sm">FenceVisionPro</span>
+            <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold text-xs">Y</div>
+            <span className="font-bold text-sm">Yardex</span>
+            <span className="text-[10px] text-slate-400 italic hidden sm:inline">Design To Inspire, Engineered to Endure.</span>
             <span className="ml-auto text-[10px] text-slate-400">Customer view</span>
           </div>
           <h1 className="mt-2 text-base font-semibold">Your fence installation progress</h1>
@@ -215,7 +216,7 @@ export default function PublicCustomerView() {
         )}
 
         <div className="text-center text-[10px] text-slate-400 pt-4 pb-2">
-          Powered by FenceVisionPro · Customer view
+          Powered by Yardex · Customer view
         </div>
       </main>
     </div>

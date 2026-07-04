@@ -95,7 +95,7 @@ export default function DashboardPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold">F</div>
-            <span className="font-bold">FenceVisionPro</span>
+            <span className="font-bold">Yardex</span>
           </div>
           <nav className="ml-2 sm:ml-8 flex flex-wrap gap-3 sm:gap-4 text-sm">
             <Link to="/" className="text-slate-900 font-medium">Quotes</Link>

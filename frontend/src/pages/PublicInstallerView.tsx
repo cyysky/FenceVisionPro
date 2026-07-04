@@ -52,8 +52,9 @@ export default function PublicInstallerView() {
       <header className="bg-white border-b sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold text-xs">F</div>
-            <span className="font-bold text-sm">FenceVisionPro</span>
+            <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold text-xs">Y</div>
+            <span className="font-bold text-sm">Yardex</span>
+            <span className="text-[10px] text-slate-400 italic hidden sm:inline">Design To Inspire, Engineered to Endure.</span>
             <span className="ml-auto text-[10px] text-slate-400">Installer view</span>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
@@ -152,7 +153,7 @@ export default function PublicInstallerView() {
         )}
 
         <div className="text-center text-[10px] text-slate-400 pt-4 pb-2">
-          Powered by FenceVisionPro · Installer link
+          Powered by Yardex · Installer link
         </div>
       </main>
     </div>

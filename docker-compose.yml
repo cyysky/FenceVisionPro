@@ -2,7 +2,7 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: fvp_db
+    container_name: yardex_db
     restart: unless-stopped
     environment:
       POSTGRES_USER: fence
@@ -22,7 +22,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: fvp_backend
+    container_name: yardex_backend
     restart: unless-stopped
     # Non-secret defaults; AI_BASE_URL and AI_API_KEY are loaded from
     # backend/.env (gitignored) via env_file below.
@@ -47,13 +47,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: fvp_frontend
+    container_name: yardex_frontend
     restart: unless-stopped
     environment:
       VITE_API_BASE: /api
     depends_on: [backend]
     ports:
-      - "12889:80"
+      - "12890:80"
 
 volumes:
   db_data:

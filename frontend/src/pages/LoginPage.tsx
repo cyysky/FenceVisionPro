@@ -47,10 +47,11 @@ export default function LoginPage() {
   return (
     <div className="min-h-full grid place-items-center bg-gradient-to-br from-brand-50 to-slate-100 p-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-white p-8 rounded-xl shadow border" noValidate>
-        <div className="flex items-center gap-2 mb-6">
-          <div className="w-8 h-8 rounded bg-brand-600 grid place-items-center text-white font-bold">F</div>
-          <h1 className="text-xl font-bold">FenceVisionPro</h1>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-8 rounded bg-brand-600 grid place-items-center text-white font-bold">Y</div>
+          <h1 className="text-xl font-bold">Yardex</h1>
         </div>
+        <p className="text-xs text-slate-500 mb-5 italic">Design To Inspire, Engineered to Endure.</p>
         <h2 className="text-lg font-semibold mb-4">Sign in</h2>
         {err && (
           <div role="alert" className="mb-3 p-2 text-sm bg-red-50 text-red-700 border border-red-200 rounded flex items-start gap-2">
@@ -88,10 +89,10 @@ export default function LoginPage() {
           {loading ? 'Signing in…' : 'Sign in'}
         </button>
         <p className="text-xs text-slate-500 mt-4 leading-relaxed">
-          Demo: <button type="button" onClick={() => { setEmail('owner@demofence.example'); setPassword('owner1234'); }}
-            className="underline hover:text-brand-700">owner@demofence.example</button> ·
-          <button type="button" onClick={() => { setEmail('admin@fencevisionpro.local'); setPassword('admin1234'); }}
-            className="underline hover:text-brand-700 ml-1">admin@fencevisionpro.local</button>
+          Demo: <button type="button" onClick={() => { setEmail('owner@yardex.local'); setPassword('owner1234'); }}
+            className="underline hover:text-brand-700">owner@yardex.local</button> ·
+          <button type="button" onClick={() => { setEmail('admin@yardex.local'); setPassword('admin1234'); }}
+            className="underline hover:text-brand-700 ml-1">admin@yardex.local</button>
         </p>
       </form>
     </div>

@@ -10,14 +10,14 @@ function validateEnv() {
   // Refuse to boot with the well-known dev defaults from .env.example.
   // NODE_ENV is hardcoded to 'production' in the Dockerfile, so we
   // use a different signal: a known dev placeholder secret.
-  // Set FVP_ALLOW_DEV_SECRET=1 to bypass this check (e.g. local demo).
+  // Set YARDEX_ALLOW_DEV_SECRET=1 to bypass this check (e.g. local demo).
   const secret = process.env.JWT_SECRET || '';
   const placeholderSecrets = new Set(['', 'change-me-in-production', 'dev-only-change-me']);
-  if (placeholderSecrets.has(secret) && process.env.FVP_ALLOW_DEV_SECRET !== '1') {
-    if (process.env.FVP_STRICT_ENV === '1') {
-      throw new Error('Refusing to start: JWT_SECRET is the .env.example placeholder. Set a strong JWT_SECRET in backend/.env (or set FVP_ALLOW_DEV_SECRET=1 for local dev).');
+  if (placeholderSecrets.has(secret) && process.env.YARDEX_ALLOW_DEV_SECRET !== '1') {
+    if (process.env.YARDEX_STRICT_ENV === '1') {
+      throw new Error('Refusing to start: JWT_SECRET is the .env.example placeholder. Set a strong JWT_SECRET in backend/.env (or set YARDEX_ALLOW_DEV_SECRET=1 for local dev).');
     }
-    console.warn('[startup] WARNING: JWT_SECRET is the .env.example placeholder. Set a strong value, or set FVP_ALLOW_DEV_SECRET=1 to silence this.');
+    console.warn('[startup] WARNING: JWT_SECRET is the .env.example placeholder. Set a strong value, or set YARDEX_ALLOW_DEV_SECRET=1 to silence this.');
   }
   if (process.env.AI_ENABLED === 'true') {
     if (!process.env.AI_BASE_URL) console.warn('[startup] WARNING: AI_ENABLED=true but AI_BASE_URL is empty. AI calls will fail.');
@@ -67,7 +67,7 @@ async function bootstrap() {
 
   const port = Number(process.env.PORT) || 3000;
   await app.listen(port, '0.0.0.0');
-  Logger.log(`FenceVisionPro API listening on :${port}`, 'Bootstrap');
+  Logger.log(`Yardex API listening on :${port}`, 'Bootstrap');
 }
 bootstrap();
 

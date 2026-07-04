@@ -5,14 +5,14 @@ const prisma = new PrismaClient();
 
 async function main() {
   // Admin
-  const adminEmail = 'admin@fencevisionpro.local';
+  const adminEmail = 'admin@yardex.local';
   const existingAdmin = await prisma.user.findUnique({ where: { email: adminEmail } });
   if (!existingAdmin) {
     await prisma.user.create({
       data: {
         email: adminEmail,
         passwordHash: await bcrypt.hash('admin1234', 10),
-        fullName: 'FenceVisionPro Admin',
+        fullName: 'Yardex Admin',
         role: Role.ADMIN,
       },
     });
@@ -20,22 +20,21 @@ async function main() {
   }
 
   // Demo wholesaler
-  const slug = 'demo-fence-co';
+  const slug = 'yardex-demo';
   let wholesaler = await prisma.wholesaler.findUnique({ where: { slug } });
   if (!wholesaler) {
     wholesaler = await prisma.wholesaler.create({
       data: {
-        name: 'Demo Fence Co',
+        name: 'Yardex Demo Dealer',
         slug,
-        contactEmail: 'owner@demofence.example',
-        contactPhone: '+1-555-0100',
+        contactEmail: 'owner@yardex.local',
       },
     });
     await prisma.user.create({
       data: {
-        email: 'owner@demofence.example',
+        email: 'owner@yardex.local',
         passwordHash: await bcrypt.hash('owner1234', 10),
-        fullName: 'Demo Owner',
+        fullName: 'Yardex Owner',
         role: Role.WHOLESALER_OWNER,
         wholesalerId: wholesaler.id,
       },
@@ -47,7 +46,7 @@ async function main() {
         termsHtml: '<p>50% deposit required to start production. Balance due on delivery. Lead time 7 working days from deposit.</p>',
       },
     });
-    console.log('Seeded demo wholesaler + owner login: owner@demofence.example / owner1234');
+    console.log('Seeded demo dealer + owner login: owner@yardex.local / owner1234');
   }
 
   // Catalog

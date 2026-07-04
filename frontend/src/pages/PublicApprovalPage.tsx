@@ -163,15 +163,21 @@ export default function PublicApprovalPage() {
   return (
     <div className="min-h-full bg-slate-50">
       <header className="bg-white border-b px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-        <h1 className="font-bold">Fence Quotation</h1>
-        <span className="text-sm text-slate-500">{quote.reference}</span>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold text-xs">Y</div>
+          <span className="font-bold">Yardex</span>
+        </div>
+        <p className="text-[10px] text-slate-400 italic hidden sm:block">Design To Inspire, Engineered to Endure.</p>
+        <span className="ml-auto text-sm font-medium">{quote.wholesaler?.name}</span>
+      </header>
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 pt-3">
+        <h1 className="text-base font-semibold">Quotation {quote.reference}</h1>
         {quote.validUntil && (
-          <span className="text-xs text-slate-500 ml-2">
+          <span className="text-xs text-slate-500">
             · Valid until {new Date(quote.validUntil).toLocaleDateString()}
           </span>
         )}
-        <span className="ml-auto text-sm font-medium">{quote.wholesaler?.name}</span>
-      </header>
+      </section>
       <main className="max-w-3xl mx-auto p-4 sm:p-6 space-y-4">
         {err && <div role="alert" className="p-3 text-sm bg-red-50 text-red-700 border border-red-200 rounded">{err}</div>}
         <section className="bg-white border rounded p-4">

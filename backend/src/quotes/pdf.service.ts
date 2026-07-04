@@ -18,7 +18,8 @@ export class PdfService {
       doc.pipe(stream);
 
       // Header
-      doc.fillColor('#0f172a').fontSize(22).text('Fence Quotation', { align: 'left' });
+      doc.fillColor('#0f172a').fontSize(22).text('Yardex Quotation', { align: 'left' });
+      doc.fontSize(8).fillColor('#94a3b8').text('Design To Inspire, Engineered to Endure.');
       doc.moveDown(0.3);
       doc.fontSize(10).fillColor('#475569').text(`Reference: ${quote.reference}`);
       doc.text(`Date: ${new Date(quote.createdAt).toLocaleDateString()}`);
@@ -118,6 +119,7 @@ export class PdfService {
         doc.fontSize(9).fillColor('#475569').text(terms.replace(/<[^>]+>/g, ''), { width: 495 });
       }
 
+      doc.fontSize(7).fillColor('#94a3b8').text('Yardex — Design To Inspire, Engineered to Endure.', 50, doc.page.height - 40, { width: 495, align: 'center' });
       doc.end();
       stream.on('finish', () => resolve(`/static/pdfs/${filename}`));
       stream.on('error', reject);

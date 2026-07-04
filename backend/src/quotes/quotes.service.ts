@@ -48,7 +48,7 @@ export class QuotesService {
 
   private nextReference(): string {
     const year = new Date().getFullYear();
-    return `FVP-${year}-${uuid().slice(0, 8).toUpperCase()}`;
+    return `YARDEX-${year}-${uuid().slice(0, 8).toUpperCase()}`;
   }
 
   /**

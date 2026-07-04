@@ -25,7 +25,7 @@ export class DesignsController {
   @Get() list() { return this.svc.list(); }
   @Get(':id') get(@Param('id') id: string) { return this.svc.get(id); }
 
-  // POST is admin-only: only FenceVisionPro staff can add to the
+  // POST is admin-only: only Yardex staff can add to the
   // global design library that every wholesaler sees.
   @Roles(Role.ADMIN)
   @Post()
