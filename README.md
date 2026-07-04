@@ -172,13 +172,20 @@ power two extra visualisation features. The credentials live in
 ### Endpoints
 
 - `GET  /ai/status` - returns whether AI is enabled and the model names
-- `POST /ai/render-image` - body `{ style, color, heightFt, surroundings? }` -> `{ url }` with a photorealistic PNG stored in `/static/renders/`
-- `POST /ai/generate-3d`  - body `{ style, color, heightFt, panelCount?, gateCount? }` -> `{ code, model }` with a self-contained three.js IIFE
+- `POST /ai/render-image` - body `{ style, color, heightFt, surroundings?, quoteId?, lineItemIndex?, overview? }` -> `{ url, aiImageUrls?, aiOverviewImageUrl? }`. When `quoteId` is set, the URL is persisted onto the quote: at `aiImageUrls[lineItemIndex]` (per-line-item), at `aiOverviewImageUrl` (when `overview: true`), or appended to `aiImageUrls` (legacy).
+- `POST /ai/generate-3d`  - body `{ style, color, heightFt, panelCount?, gateCount?, quoteId? }` -> `{ code, model }`. When `quoteId` is set, the code is also persisted onto `quote.threeJsCode` so it survives a page refresh.
+- `POST /ai/analyse-photo`  - multipart `file` plus optional `quoteId` form field. Uploads the photo to `/static/uploads/`, runs the vision model, and (when `quoteId` is set) appends the result to `quote.photoAnalyses`.
+- `POST /ai/analyse-photo-url` - body `{ imageUrl, quoteId? }`. Re-analyses an already-uploaded image and (when `quoteId` is set) appends the result to `quote.photoAnalyses`.
+- `GET  /ai/quote/:quoteId/photo-analyses` - returns the gallery of analyses for a quote.
 
 ### Where the AI shows up in the UI
 
 - **NewQuotePage** - "Design preview" section gains two buttons: "✨ AI render image" and "🧊 Generate 3D scene". The AI image is automatically used as the quote's preview when the user saves.
-- **QuoteDetailPage** - "AI visualisation" section lets the dealer re-run the AI at any time to get a fresh render for the customer.
+- **QuoteDetailPage** - "AI visualisation" section lets the dealer re-run the AI at any time. Two separate flows:
+  - Whole-quote render: the original button writes the URL onto `quote.renderUrl` and is shown in the "Rendered preview" card.
+  - Per-item renders: a "Per-item AI renders" section shows a card for each line item with its own Generate / Regenerate button. URLs are saved to `quote.aiImageUrls[i]` in order, so the customer-facing PDF shows one thumbnail per item, and the views survive a page refresh. A "✨ Generate all items" button walks every line item in sequence.
+  - 3D scene: a "🎮 View 3D scene" button opens the saved `quote.threeJsCode` in a modal with the sandboxed ThreeJsViewer. The viewer toolbar has Reset view, Reset zoom, Auto-orbit and Rerun controls.
+- **ProjectDetailPage** - each `AI_3D_SNAPSHOT` tile has a "🎮 View 3D" button that opens the saved `viz.sourceCode` in the ThreeJsViewer modal.
 
 ### Security
 
@@ -196,6 +203,17 @@ so the only global the generated code can see is THREE itself.
 The image generation runs **server-side** and writes the result into
 `./data/renders/`, which is served back to the browser as a static
 asset. The API key never reaches the client.
+
+### Public PDFs
+
+Customer-shareable PDFs (quotation and invoice) are written to
+`<DATA_DIR>/public/pdfs/` and served via the unauthenticated
+`/public/pdfs/:filename` route (see `PublicAssetsController`).
+The older `/static/pdfs/:filename` route is still JWT-gated for
+backward compat with old drafts. To expose `/public/` through
+the public 12883 vhost, add the location block in
+`deploy/nginx/yardex-12883-public-snippet.conf` to the existing
+nginx server config and reload nginx.
 
 ## Deployment
 
