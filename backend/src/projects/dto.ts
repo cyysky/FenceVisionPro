@@ -18,11 +18,11 @@ export class CreateProjectDto {
   @IsOptional() @IsNumber() @Min(0) totalLinearMeters?: number;
   @IsOptional() @IsNumber() @Min(0) totalAreaSqM?: number;
   /**
-   * Optional. Admins can create on behalf of a wholesaler; wholesaler
+   * Optional. Admins can create on behalf of a dealer; dealer
    * users must omit this (the controller overrides with the caller's
-   * wholesalerId).
+   * dealerId).
    */
-  @IsOptional() @IsString() wholesalerId?: string;
+  @IsOptional() @IsString() dealerId?: string;
 }
 
 export class UpdateProjectDto {

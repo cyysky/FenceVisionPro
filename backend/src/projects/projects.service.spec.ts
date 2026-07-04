@@ -78,7 +78,7 @@ describe('ProjectsService', () => {
         create: jest.fn(),
       },
       quote: { update: jest.fn() },
-      wholesaler: { findUnique: jest.fn() },
+      dealer: { findUnique: jest.fn() },
     };
     ai = {
       generateFenceImage: jest.fn(),
@@ -98,26 +98,26 @@ describe('ProjectsService', () => {
     svc = mod.get(ProjectsService);
   });
 
-  const staffA = { sub: 'u-A', role: Role.WHOLESALER_STAFF, wholesalerId: 'wA' } as any;
-  const ownerA = { sub: 'u-A2', role: Role.WHOLESALER_OWNER, wholesalerId: 'wA' } as any;
-  const staffB = { sub: 'u-B', role: Role.WHOLESALER_STAFF, wholesalerId: 'wB' } as any;
-  const admin  = { sub: 'u-0', role: Role.ADMIN, wholesalerId: null } as any;
+  const staffA = { sub: 'u-A', role: Role.DEALER_STAFF, dealerId: 'wA' } as any;
+  const ownerA = { sub: 'u-A2', role: Role.DEALER_OWNER, dealerId: 'wA' } as any;
+  const staffB = { sub: 'u-B', role: Role.DEALER_STAFF, dealerId: 'wB' } as any;
+  const admin  = { sub: 'u-0', role: Role.ADMIN, dealerId: null } as any;
 
   // -------------------------------------------------------------------------
   // findOne / ownership
   // -------------------------------------------------------------------------
 
   describe('findOne (ownership)', () => {
-    it("throws ForbiddenException when a non-admin user from wholesaler A requests wholesaler B's project", async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wB' });
+    it("throws ForbiddenException when a non-admin user from dealer A requests dealer B's project", async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wB' });
       await expect(svc.findOne('p1', staffA)).rejects.toBeInstanceOf(ForbiddenException);
     });
 
     it('returns the project when the user owns it', async () => {
       prisma.project.findUnique
-        .mockResolvedValueOnce({ id: 'p1', wholesalerId: 'wA' })
+        .mockResolvedValueOnce({ id: 'p1', dealerId: 'wA' })
         .mockResolvedValueOnce({
-          id: 'p1', wholesalerId: 'wA',
+          id: 'p1', dealerId: 'wA',
           documents: [], selections: [], measurements: [], visualizations: [],
         });
       const out = await svc.findOne('p1', staffA);
@@ -125,11 +125,11 @@ describe('ProjectsService', () => {
       expect(out.documents).toEqual([]);
     });
 
-    it('returns the project when the user is admin regardless of wholesalerId', async () => {
+    it('returns the project when the user is admin regardless of dealerId', async () => {
       prisma.project.findUnique
-        .mockResolvedValueOnce({ id: 'p2', wholesalerId: 'wB' })
+        .mockResolvedValueOnce({ id: 'p2', dealerId: 'wB' })
         .mockResolvedValueOnce({
-          id: 'p2', wholesalerId: 'wB',
+          id: 'p2', dealerId: 'wB',
           documents: [], selections: [], measurements: [], visualizations: [],
         });
       const out = await svc.findOne('p2', admin);
@@ -148,7 +148,7 @@ describe('ProjectsService', () => {
 
   describe('uploadDocument', () => {
     it('rejects files larger than 25 MB', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA' });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
       // 26 MB of valid PNG bytes
       const tooBig = Buffer.alloc(26 * 1024 * 1024, 0);
       const file = {
@@ -162,7 +162,7 @@ describe('ProjectsService', () => {
     });
 
     it('rejects mime types not in the allowlist', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA' });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
       const buf = Buffer.from('GIF89a');
       const file = {
         originalname: 'thing.gif', buffer: buf, size: buf.length, mimetype: 'image/gif',
@@ -172,7 +172,7 @@ describe('ProjectsService', () => {
     });
 
     it('rejects files whose magic bytes do not match the declared mime type', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA' });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
       // Content is plain text but claimed to be PNG.
       const buf = Buffer.from('this is not a png');
       const file = {
@@ -183,7 +183,7 @@ describe('ProjectsService', () => {
     });
 
     it('extracts widthPx/heightPx for a valid PNG', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA' });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
       // Tiny valid 1x1 PNG.
       const png1x1 = Buffer.from(
         '89504E470D0A1A0A0000000D49484452000000010000000108060000001F15C4' +
@@ -230,7 +230,7 @@ describe('ProjectsService', () => {
 
   describe('generateVisualization', () => {
     it('persists AI_IMAGE bytes and metadata when aiService.generateFenceImage returns a path', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA' });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
       // Write a real temp file under a temp data dir so the service
       // can read it back. We override DATA_DIR for this test so we
       // never touch the repo's real data/ directory.
@@ -278,7 +278,7 @@ describe('ProjectsService', () => {
     });
 
     it('persists AI_3D_SNAPSHOT source code as application/javascript', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA' });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
       const code = '(function(){ var x = 1; })();';
       ai.generateThreeJsScene.mockResolvedValue({ code, model: 'mock-code' });
       prisma.projectVisualization.create.mockImplementation(({ data }: any) => ({
@@ -310,7 +310,7 @@ describe('ProjectsService', () => {
 
   describe('promoteToQuote', () => {
     it('creates a Quote with derived segments and links it to the project', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA', status: ProjectStatus.DRAFT });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', status: ProjectStatus.DRAFT });
       prisma.projectFenceSelection.findMany.mockResolvedValue([
         { id: 's1', projectId: 'p1', productId: 'prod-1', designId: null, linearMeters: 12, heightFt: 6, panelCount: 5, gateCount: 1, notes: null, sortOrder: 0 },
         { id: 's2', projectId: 'p1', productId: 'prod-2', designId: 'design-1', linearMeters: 8, heightFt: 4, panelCount: null, gateCount: 0, notes: null, sortOrder: 1 },
@@ -324,7 +324,7 @@ describe('ProjectsService', () => {
 
       // QuotesService.create received one segment per selection.
       const createArg = quotes.create.mock.calls[0];
-      expect(createArg[0]).toBe('wA');                            // wholesalerId
+      expect(createArg[0]).toBe('wA');                            // dealerId
       expect(createArg[1]).toBe(ownerA.sub);                     // userId
       const dto = createArg[2];
       expect(dto.fenceSegments).toHaveLength(2);
@@ -347,7 +347,7 @@ describe('ProjectsService', () => {
     });
 
     it('sets project.status = QUOTED', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA', status: ProjectStatus.SUBMITTED });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', status: ProjectStatus.SUBMITTED });
       prisma.projectFenceSelection.findMany.mockResolvedValue([
         { id: 's1', productId: 'prod-1', linearMeters: 5, heightFt: 5, designId: null, panelCount: null, gateCount: null, sortOrder: 0, notes: null },
       ]);
@@ -361,7 +361,7 @@ describe('ProjectsService', () => {
     });
 
     it('refuses to promote a project with no fence selections', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wA', status: ProjectStatus.DRAFT });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', status: ProjectStatus.DRAFT });
       prisma.projectFenceSelection.findMany.mockResolvedValue([]);
       await expect(svc.promoteToQuote('p1', ownerA, { customerEmail: 'a@b.com' }))
         .rejects.toThrow(/at least one fence selection/i);
@@ -369,7 +369,7 @@ describe('ProjectsService', () => {
 
     it('refuses to promote when the project has no customer email and none is provided', async () => {
       prisma.project.findUnique.mockResolvedValue({
-        id: 'p1', wholesalerId: 'wA', status: ProjectStatus.DRAFT, customerEmail: null,
+        id: 'p1', dealerId: 'wA', status: ProjectStatus.DRAFT, customerEmail: null,
       });
       prisma.projectFenceSelection.findMany.mockResolvedValue([
         { id: 's1', productId: 'p', linearMeters: 1, heightFt: 4, designId: null, panelCount: null, gateCount: null, sortOrder: 0, notes: null },
@@ -379,7 +379,7 @@ describe('ProjectsService', () => {
     });
 
     it('blocks non-owner non-admin from promoting', async () => {
-      prisma.project.findUnique.mockResolvedValue({ id: 'p1', wholesalerId: 'wB', status: ProjectStatus.DRAFT });
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wB', status: ProjectStatus.DRAFT });
       await expect(svc.promoteToQuote('p1', staffA, { customerEmail: 'a@b.com' }))
         .rejects.toBeInstanceOf(ForbiddenException);
     });

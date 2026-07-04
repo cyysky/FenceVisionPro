@@ -19,19 +19,19 @@ describe('AuthService - login and isActive', () => {
   it('returns accessToken + user on valid credentials', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'u1', email: 'a@x.com', fullName: 'A',
-      role: 'WHOLESALER_OWNER', wholesalerId: 'w1', isActive: true,
+      role: 'DEALER_OWNER', dealerId: 'w1', isActive: true,
       passwordHash: await bcrypt.hash('rightpw', 4),
     });
     const out = await svc.login('a@x.com', 'rightpw');
     expect(out.accessToken).toBe('TOKEN');
     expect(out.user.email).toBe('a@x.com');
-    expect(out.user.role).toBe('WHOLESALER_OWNER');
+    expect(out.user.role).toBe('DEALER_OWNER');
   });
 
   it('rejects wrong password', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'u1', email: 'a@x.com', fullName: 'A',
-      role: 'WHOLESALER_OWNER', wholesalerId: 'w1', isActive: true,
+      role: 'DEALER_OWNER', dealerId: 'w1', isActive: true,
       passwordHash: await bcrypt.hash('rightpw', 4),
     });
     await expect(svc.login('a@x.com', 'wrongpw')).rejects.toThrow(/Invalid credentials/);
@@ -45,7 +45,7 @@ describe('AuthService - login and isActive', () => {
   it('rejects deactivated user even with correct password', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'u1', email: 'a@x.com', fullName: 'A',
-      role: 'WHOLESALER_OWNER', wholesalerId: 'w1', isActive: false,
+      role: 'DEALER_OWNER', dealerId: 'w1', isActive: false,
       passwordHash: await bcrypt.hash('rightpw', 4),
     });
     await expect(svc.login('a@x.com', 'rightpw')).rejects.toThrow(/Invalid credentials/);
@@ -54,7 +54,7 @@ describe('AuthService - login and isActive', () => {
   it('lowercases the email on lookup', async () => {
     prisma.user.findUnique.mockResolvedValue({
       id: 'u1', email: 'a@x.com', fullName: 'A',
-      role: 'WHOLESALER_OWNER', wholesalerId: 'w1', isActive: true,
+      role: 'DEALER_OWNER', dealerId: 'w1', isActive: true,
       passwordHash: await bcrypt.hash('rightpw', 4),
     });
     await svc.login('A@X.COM', 'rightpw');

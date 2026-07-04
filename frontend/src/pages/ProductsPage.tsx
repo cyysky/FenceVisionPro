@@ -38,7 +38,7 @@ export default function ProductsPage() {
       <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center flex-wrap gap-2">
         <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Back</Link>
         <h1 className="font-bold">Products & prices</h1>
-        <span className="ml-2 text-xs text-slate-500 hidden sm:inline">Your effective price per product (after any per-wholesaler override).</span>
+        <span className="ml-2 text-xs text-slate-500 hidden sm:inline">Your effective price per product (after any per-dealer override).</span>
       </header>
       <main className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4">
         <div className="flex flex-wrap gap-2 text-xs items-center">

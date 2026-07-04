@@ -32,12 +32,12 @@ export class ProductsController {
 
   @Get()
   list(@CurrentUser() u: JwtPayload) {
-    return this.svc.listForWholesaler(u.role === Role.ADMIN ? null : u.wholesalerId);
+    return this.svc.listForDealer(u.role === Role.ADMIN ? null : u.dealerId);
   }
 
   @Get(':id')
   get(@Param('id') id: string, @CurrentUser() u: JwtPayload) {
-    return this.svc.get(id, u.role === Role.ADMIN ? null : u.wholesalerId);
+    return this.svc.get(id, u.role === Role.ADMIN ? null : u.dealerId);
   }
 
   @Roles(Role.ADMIN)
@@ -53,14 +53,14 @@ export class ProductsController {
   }
 
   @Roles(Role.ADMIN)
-  @Post(':id/override/:wholesalerId')
-  setOverride(@Param('id') id: string, @Param('wholesalerId') wholesalerId: string, @Body() dto: SetOverrideDto) {
-    return this.svc.setOverride(wholesalerId, id, dto.price);
+  @Post(':id/override/:dealerId')
+  setOverride(@Param('id') id: string, @Param('dealerId') dealerId: string, @Body() dto: SetOverrideDto) {
+    return this.svc.setOverride(dealerId, id, dto.price);
   }
 
   @Roles(Role.ADMIN)
-  @Delete(':id/override/:wholesalerId')
-  clearOverride(@Param('id') id: string, @Param('wholesalerId') wholesalerId: string) {
-    return this.svc.clearOverride(wholesalerId, id);
+  @Delete(':id/override/:dealerId')
+  clearOverride(@Param('id') id: string, @Param('dealerId') dealerId: string) {
+    return this.svc.clearOverride(dealerId, id);
   }
 }

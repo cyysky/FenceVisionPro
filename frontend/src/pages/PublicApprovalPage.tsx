@@ -103,7 +103,7 @@ export default function PublicApprovalPage() {
       setDone(false);
       setQuote(r.data);
       setShowReject(false);
-      toast.success('Quote declined - the wholesaler has been notified');
+      toast.success('Quote declined - the dealer has been notified');
     } catch (e: any) { setErr(e?.response?.data?.message || 'Could not decline the quote'); }
     finally { setRejecting(false); }
   }
@@ -140,7 +140,7 @@ export default function PublicApprovalPage() {
         <div className="text-3xl">⚠️</div>
         <h1 className="text-lg font-bold mt-2">Quote unavailable</h1>
         <p className="text-sm text-slate-600 mt-1">{err}</p>
-        <p className="text-xs text-slate-500 mt-3">If you reached this page from an email link, double-check the URL or contact your wholesaler.</p>
+        <p className="text-xs text-slate-500 mt-3">If you reached this page from an email link, double-check the URL or contact your dealer.</p>
       </div>
     </div>
   );
@@ -150,7 +150,7 @@ export default function PublicApprovalPage() {
       <div className="bg-white border rounded-xl p-8 max-w-md text-center shadow-sm">
         <div className="text-5xl">✅</div>
         <h1 className="text-2xl font-bold mt-3">Quote approved</h1>
-        <p className="text-sm text-slate-600 mt-2">Thank you, {quote.customerName}. Your wholesaler has been notified and will be in touch to confirm next steps.</p>
+        <p className="text-sm text-slate-600 mt-2">Thank you, {quote.customerName}. Your dealer has been notified and will be in touch to confirm next steps.</p>
         {approvedAt && <p className="text-xs text-slate-500 mt-3">Approved on {new Date(approvedAt).toLocaleString()}</p>}
         <div className="mt-5 pt-4 border-t text-left text-sm space-y-1">
           <div className="flex justify-between"><span className="text-slate-500">Reference</span><span className="font-mono">{quote.reference}</span></div>
@@ -168,7 +168,7 @@ export default function PublicApprovalPage() {
           <span className="font-bold">Yardex</span>
         </div>
         <p className="text-[10px] text-slate-400 italic hidden sm:block">Design To Inspire, Engineered to Endure.</p>
-        <span className="ml-auto text-sm font-medium">{quote.wholesaler?.name}</span>
+        <span className="ml-auto text-sm font-medium">{quote.dealer?.name}</span>
       </header>
       <section className="max-w-3xl mx-auto px-4 sm:px-6 pt-3">
         <h1 className="text-base font-semibold">Quotation {quote.reference}</h1>
@@ -219,17 +219,17 @@ export default function PublicApprovalPage() {
           </table>
         </section>
 
-        {quote.wholesaler?.termsHtml && (
+        {quote.dealer?.termsHtml && (
           <section className="bg-white border rounded p-4 text-sm text-slate-600">
             <h3 className="font-semibold text-slate-700 mb-1">Terms</h3>
-            <div dangerouslySetInnerHTML={{ __html: quote.wholesaler.termsHtml }} />
+            <div dangerouslySetInnerHTML={{ __html: quote.dealer.termsHtml }} />
           </section>
         )}
 
         {showReject && (
           <section className="bg-white border border-red-200 rounded p-4 space-y-2">
             <h3 className="font-semibold text-red-800">Decline this quote</h3>
-            <p className="text-xs text-slate-600">Optional: tell the wholesaler why. This helps them follow up with a better offer.</p>
+            <p className="text-xs text-slate-600">Optional: tell the dealer why. This helps them follow up with a better offer.</p>
             <textarea value={rejectReason} onChange={e => setRejectReason(e.target.value)} maxLength={2000}
               className="w-full border rounded p-2 text-sm min-h-24" placeholder="Reason (optional)…" />
             <div className="flex gap-2 justify-end">
@@ -269,17 +269,17 @@ export default function PublicApprovalPage() {
         )}
         {quote.status === 'APPROVED' && (
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 p-3 rounded text-sm">
-            ✓ This quotation has been approved. The wholesaler will be in touch to confirm next steps.
+            ✓ This quotation has been approved. The dealer will be in touch to confirm next steps.
           </div>
         )}
         {quote.status === 'REJECTED' && (
           <div className="bg-red-50 border border-red-200 text-red-800 p-3 rounded text-sm">
-            This quotation was declined. Please contact your wholesaler to discuss alternatives.
+            This quotation was declined. Please contact your dealer to discuss alternatives.
           </div>
         )}
         {quote.status === 'EXPIRED' && (
           <div className="bg-slate-100 border border-slate-200 text-slate-700 p-3 rounded text-sm">
-            This quotation has expired. Please ask your wholesaler for a new one.
+            This quotation has expired. Please ask your dealer for a new one.
           </div>
         )}
       </main>

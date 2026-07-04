@@ -182,7 +182,7 @@ export default function PublicCustomerView() {
           <section className="bg-emerald-50 border border-emerald-200 text-emerald-800 rounded p-4 text-sm text-center space-y-1">
             <div className="text-2xl">✅</div>
             <div className="font-semibold">Thank you — installation completed on {view.inspectedAt ? new Date(view.inspectedAt).toLocaleDateString() : 'today'}.</div>
-            <p className="text-xs">The wholesaler has been notified of your sign-off.</p>
+            <p className="text-xs">The dealer has been notified of your sign-off.</p>
           </section>
         )}
 
@@ -198,7 +198,7 @@ export default function PublicCustomerView() {
             </div>
             {!hasInk && <p className="text-xs text-slate-500 text-center">✍ Sign here</p>}
             <textarea value={comment} onChange={e => setComment(e.target.value)} maxLength={2000}
-              placeholder="Optional comment for the wholesaler…" className="w-full border rounded p-2 text-sm" rows={2} />
+              placeholder="Optional comment for the dealer…" className="w-full border rounded p-2 text-sm" rows={2} />
             <div className="flex gap-2 justify-end">
               <button onClick={prepareCanvas} className="px-3 py-1.5 border rounded text-sm">Clear</button>
               <button onClick={approve} disabled={signing} className="px-4 py-2 bg-emerald-600 text-white rounded text-sm font-medium disabled:opacity-50">
@@ -211,7 +211,7 @@ export default function PublicCustomerView() {
 
         {view.status === 'CANCELLED' && (
           <section className="bg-red-50 border border-red-200 text-red-800 rounded p-3 text-sm">
-            This installation was cancelled. Please contact your wholesaler to discuss next steps.
+            This installation was cancelled. Please contact your dealer to discuss next steps.
           </section>
         )}
 

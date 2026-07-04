@@ -60,7 +60,7 @@ export interface ProjectVisualization {
 
 export interface Project {
   id: string;
-  wholesalerId: string;
+  dealerId: string;
   customerName: string;
   customerEmail?: string | null;
   customerPhone?: string | null;

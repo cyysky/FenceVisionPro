@@ -60,7 +60,7 @@ export function sniffMimeType(buf: Buffer): string | null {
 interface AuthedUser extends JwtPayload {
   sub: string;
   role: string;
-  wholesalerId: string | null;
+  dealerId: string | null;
 }
 
 @Injectable()
@@ -74,14 +74,14 @@ export class ProjectsService {
 
   /**
    * Centralised ownership check. Admins bypass; otherwise the
-   * project's wholesalerId must match the caller's wholesalerId.
+   * project's dealerId must match the caller's dealerId.
    * Throws 404 if the project is missing so we don't leak the
    * existence of cross-tenant rows.
    */
   async assertOwnership(projectId: string, user: AuthedUser) {
     const project = await this.prisma.project.findUnique({ where: { id: projectId } });
     if (!project) throw new NotFoundException('Project not found');
-    if (user.role !== Role.ADMIN && project.wholesalerId !== user.wholesalerId) {
+    if (user.role !== Role.ADMIN && project.dealerId !== user.dealerId) {
       throw new ForbiddenException('Not your project');
     }
     return project;
@@ -89,7 +89,7 @@ export class ProjectsService {
 
   /**
    * List projects visible to the caller with optional filters. Admin
-   * sees every row; wholesaler users are scoped to their tenant.
+   * sees every row; dealer users are scoped to their tenant.
    * Returns `{ rows, total }` so the dashboard can show a count
    * without a second round-trip.
    */
@@ -104,7 +104,7 @@ export class ProjectsService {
       skip?: number;
     } = {},
   ) {
-    const where: any = user.role === Role.ADMIN ? {} : { wholesalerId: user.wholesalerId! };
+    const where: any = user.role === Role.ADMIN ? {} : { dealerId: user.dealerId! };
     if (opts.status) where.status = opts.status;
     if (opts.projectType) where.projectType = opts.projectType;
     if (opts.installScope) where.installScope = opts.installScope;
@@ -164,10 +164,10 @@ export class ProjectsService {
   }
 
   /**
-   * Create a new project. Wholesaler users are pinned to their own
-   * tenant even if the body contains a wholesalerId (defence in depth
+   * Create a new project. Dealer users are pinned to their own
+   * tenant even if the body contains a dealerId (defence in depth
    * - validation rejects it for them too, but we override to be safe).
-   * Admin callers may set wholesalerId explicitly.
+   * Admin callers may set dealerId explicitly.
    */
   async create(user: AuthedUser, dto: {
     customerName: string;
@@ -179,24 +179,24 @@ export class ProjectsService {
     notes?: string;
     totalLinearMeters?: number;
     totalAreaSqM?: number;
-    wholesalerId?: string;
+    dealerId?: string;
   }) {
-    const wholesalerId = user.role === Role.ADMIN
-      ? (dto.wholesalerId ?? user.wholesalerId ?? null)
-      : user.wholesalerId;
-    if (!wholesalerId) {
-      throw new ForbiddenException('Only wholesaler users can create projects');
+    const dealerId = user.role === Role.ADMIN
+      ? (dto.dealerId ?? user.dealerId ?? null)
+      : user.dealerId;
+    if (!dealerId) {
+      throw new ForbiddenException('Only dealer users can create projects');
     }
-    // Validate the wholesaler exists when an admin is creating on
+    // Validate the dealer exists when an admin is creating on
     // someone else's behalf - a typo in the body should 4xx, not
     // produce an FK violation deep in Prisma.
-    if (user.role === Role.ADMIN && dto.wholesalerId) {
-      const w = await this.prisma.wholesaler.findUnique({ where: { id: dto.wholesalerId } });
-      if (!w) throw new BadRequestException('Unknown wholesalerId');
+    if (user.role === Role.ADMIN && dto.dealerId) {
+      const w = await this.prisma.dealer.findUnique({ where: { id: dto.dealerId } });
+      if (!w) throw new BadRequestException('Unknown dealerId');
     }
     return this.prisma.project.create({
       data: {
-        wholesalerId,
+        dealerId,
         customerName: dto.customerName,
         customerEmail: dto.customerEmail ?? null,
         customerPhone: dto.customerPhone ?? null,
@@ -568,8 +568,8 @@ export class ProjectsService {
     customerPhone?: string; customerAddress?: string; notes?: string;
   }) {
     const project = await this.assertOwnership(projectId, user);
-    if (!project.wholesalerId && user.role !== Role.ADMIN) {
-      throw new ForbiddenException('Project has no wholesaler');
+    if (!project.dealerId && user.role !== Role.ADMIN) {
+      throw new ForbiddenException('Project has no dealer');
     }
     if (project.status === ProjectStatus.CANCELLED) {
       throw new BadRequestException('Cannot promote a cancelled project');
@@ -599,7 +599,7 @@ export class ProjectsService {
       heightOption: String(s.heightFt),
     }));
     const quote = await this.quotes.create(
-      project.wholesalerId!,
+      project.dealerId!,
       user.sub,
       {
         customerName: override.customerName ?? project.customerName,

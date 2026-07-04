@@ -16,7 +16,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       role: user.role,
-      wholesalerId: user.wholesalerId ?? null,
+      dealerId: user.dealerId ?? null,
     };
     return {
       accessToken: this.jwt.sign(payload),
@@ -25,7 +25,7 @@ export class AuthService {
         email: user.email,
         fullName: user.fullName,
         role: user.role,
-        wholesalerId: user.wholesalerId,
+        dealerId: user.dealerId,
       },
     };
   }

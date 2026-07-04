@@ -17,12 +17,12 @@ import {
 } from './dto';
 
 /**
- * Wholesaler-facing installation endpoints. Mounted at
+ * Dealer-facing installation endpoints. Mounted at
  * `/installations` (no global prefix in this app, see main.ts).
  * All routes require a JWT and (for non-admin users) are
  * implicitly tenant-scoped inside the service via findOwned().
  */
-const ROLES = [Role.ADMIN, Role.WHOLESALER_OWNER, Role.WHOLESALER_STAFF];
+const ROLES = [Role.ADMIN, Role.DEALER_OWNER, Role.DEALER_STAFF];
 
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Roles(...ROLES)

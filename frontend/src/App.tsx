@@ -11,7 +11,7 @@ import QuoteDetailPage from './pages/QuoteDetailPage';
 import PublicApprovalPage from './pages/PublicApprovalPage';
 import ProductsPage from './pages/ProductsPage';
 import DesignsPage from './pages/DesignsPage';
-import WholesalersPage from './pages/WholesalersPage';
+import DealersPage from './pages/DealersPage';
 import ProjectsPage from './pages/ProjectsPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
@@ -43,7 +43,7 @@ export default function App() {
             <Route path="/installations/:id" element={<RequireAuth><InstallationDetailPage /></RequireAuth>} />
             <Route path="/products" element={<RequireAuth><ProductsPage /></RequireAuth>} />
             <Route path="/designs" element={<RequireAuth><DesignsPage /></RequireAuth>} />
-            <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><WholesalersPage /></RequireAuth>} />
+            <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><DealersPage /></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <ConfirmDialog />

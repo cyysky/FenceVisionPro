@@ -14,7 +14,7 @@ import type { InstallationPhoto, InstallationPhotoKind, InstallationStatus } fro
  * The installer is scoped to "milestone updates only" - they can
  * check off KICKOFF / MATERIALS_RECEIVED / POSTS_SET / etc, and
  * upload photos. They CANNOT change the overall status directly
- * (the wholesaler does that), but they CAN fire "Mark Complete"
+ * (the dealer does that), but they CAN fire "Mark Complete"
  * when the work is done in IN_PROGRESS.
  */
 export default function PublicInstallerView() {
@@ -37,7 +37,7 @@ export default function PublicInstallerView() {
           <div className="text-4xl">🔒</div>
           <h1 className="text-lg font-semibold">Link unavailable</h1>
           <p className="text-sm text-slate-600">{err}</p>
-          <p className="text-xs text-slate-400">Please contact your wholesaler for a new link.</p>
+          <p className="text-xs text-slate-400">Please contact your dealer for a new link.</p>
         </div>
       </div>
     );
@@ -112,7 +112,7 @@ export default function PublicInstallerView() {
             >
               ✓ Mark Complete
             </button>
-            <p className="text-[11px] text-slate-500 mt-1">The wholesaler + customer will be notified.</p>
+            <p className="text-[11px] text-slate-500 mt-1">The dealer + customer will be notified.</p>
           </section>
         )}
 

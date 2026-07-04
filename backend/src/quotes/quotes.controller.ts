@@ -28,7 +28,7 @@ export class QuotesController {
 
   @Get()
   list(@CurrentUser() u: JwtPayload, @Query() q: { status?: string; q?: string; sort?: string; limit?: string }) {
-    return this.svc.list(u.wholesalerId, u.role === Role.ADMIN, {
+    return this.svc.list(u.dealerId, u.role === Role.ADMIN, {
       status: q?.status,
       q: q?.q,
       sort: q?.sort,
@@ -38,40 +38,40 @@ export class QuotesController {
 
   @Get(':id')
   get(@Param('id') id: string, @CurrentUser() u: JwtPayload) {
-    return this.svc.get(id, u.wholesalerId, u.role === Role.ADMIN);
+    return this.svc.get(id, u.dealerId, u.role === Role.ADMIN);
   }
 
   @Post()
   create(@Body() dto: CreateQuoteDto, @CurrentUser() u: JwtPayload) {
-    return this.svc.create(u.wholesalerId, u.sub, dto as unknown as CreateQuoteInput);
+    return this.svc.create(u.dealerId, u.sub, dto as unknown as CreateQuoteInput);
   }
 
   @Post(':id/clone')
   clone(@Param('id') id: string, @CurrentUser() u: JwtPayload) {
-    return this.svc.clone(id, u.wholesalerId, u.role === Role.ADMIN);
+    return this.svc.clone(id, u.dealerId, u.role === Role.ADMIN);
   }
 
   /**
-   * Wholesaler (or admin) marks a SENT quote as REJECTED - useful
+   * Dealer (or admin) marks a SENT quote as REJECTED - useful
    * when the customer declines over the phone and never opens the
    * public approval link.
    */
   @Post(':id/reject')
   async rejectByOwner(@Param('id') id: string, @Body() body: { reason?: string }, @CurrentUser() u: JwtPayload) {
     // Ownership check
-    await this.svc.get(id, u.wholesalerId, u.role === Role.ADMIN);
-    return this.svc.rejectByOwner(id, body?.reason, u.role === Role.ADMIN, u.wholesalerId);
+    await this.svc.get(id, u.dealerId, u.role === Role.ADMIN);
+    return this.svc.rejectByOwner(id, body?.reason, u.role === Role.ADMIN, u.dealerId);
   }
 
   @Delete(':id')
   async remove(@Param('id') id: string, @CurrentUser() u: JwtPayload) {
-    const q = await this.svc.get(id, u.wholesalerId, u.role === Role.ADMIN);
-    return this.svc.remove(q.id, u.wholesalerId, u.role === Role.ADMIN);
+    const q = await this.svc.get(id, u.dealerId, u.role === Role.ADMIN);
+    return this.svc.remove(q.id, u.dealerId, u.role === Role.ADMIN);
   }
 
   @Put(':id/status')
   updateStatus(@Param('id') id: string, @Body() body: UpdateStatusDto, @CurrentUser() u: JwtPayload) {
-    return this.svc.updateStatus(id, u.wholesalerId, u.role === Role.ADMIN, body.status);
+    return this.svc.updateStatus(id, u.dealerId, u.role === Role.ADMIN, body.status);
   }
 
   @Post('upload-floorplan')
@@ -95,7 +95,7 @@ export class QuotesController {
 
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateQuoteDto, @CurrentUser() u: JwtPayload) {
-    return this.svc.update(id, u.wholesalerId, u.role === Role.ADMIN, dto as any);
+    return this.svc.update(id, u.dealerId, u.role === Role.ADMIN, dto as any);
   }
 
 
@@ -107,7 +107,7 @@ export class QuotesController {
   @Post(':id/snapshot')
   async saveSnapshot(@Param('id') id: string, @Body() body: { dataUrl?: string }, @CurrentUser() u: JwtPayload) {
     // Ownership check: throws 403/404 if not your quote
-    await this.svc.get(id, u.wholesalerId, u.role === Role.ADMIN);
+    await this.svc.get(id, u.dealerId, u.role === Role.ADMIN);
     if (!body?.dataUrl) throw new BadRequestException('dataUrl is required');
     let saved;
     try {
@@ -116,13 +116,13 @@ export class QuotesController {
       throw new BadRequestException(e?.message || 'invalid image data');
     }
     // Persist the URL on the quote so it survives reloads
-    await this.svc.update(id, u.wholesalerId, u.role === Role.ADMIN, { renderUrl: saved.url });
+    await this.svc.update(id, u.dealerId, u.role === Role.ADMIN, { renderUrl: saved.url });
     return { url: saved.url };
   }
 
   @Get(':id/pdf')
   async getPdf(@Param('id') id: string, @CurrentUser() u: JwtPayload) {
-    const q = await this.svc.get(id, u.wholesalerId, u.role === Role.ADMIN);
+    const q = await this.svc.get(id, u.dealerId, u.role === Role.ADMIN);
     const url = await this.pdf.generate(q);
     return { url };
   }
@@ -133,7 +133,7 @@ export class QuotesController {
    * repeatedly (idempotent). Usually invoked by a periodic cron, but
    * also useful for ops debugging.
    *
-   * Admin-only: a wholesaler has no business sweeping the global
+   * Admin-only: a dealer has no business sweeping the global
    * quote pool, and the in-process interval in main.ts already
    * handles their own quotes every 5 minutes.
    */

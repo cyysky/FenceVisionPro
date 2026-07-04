@@ -53,21 +53,21 @@ export class QuotesService {
 
   /**
    * List quotes visible to this user. Admins see everything;
-   * wholesaler users see only their own. Supports optional
+   * dealer users see only their own. Supports optional
    * filters: status (single or array of statuses), search
    * (matches reference / customer name / email), and a
    * `sort` param for the dashboard's sort dropdown.
    *
-   * Keeping the filtering on the server means a wholesaler
+   * Keeping the filtering on the server means a dealer
    * with thousands of quotes can still scroll the dashboard
    * quickly. The default ordering is newest-first.
    */
   async list(
-    wholesalerId: string | null,
+    dealerId: string | null,
     isAdmin: boolean,
     opts: { status?: string; q?: string; sort?: string; limit?: number } = {},
   ) {
-    const where: any = isAdmin ? {} : { wholesalerId: wholesalerId! };
+    const where: any = isAdmin ? {} : { dealerId: dealerId! };
     if (opts.status) {
       const statuses = opts.status.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
       if (statuses.length === 1) where.status = statuses[0];
@@ -98,26 +98,26 @@ export class QuotesService {
     });
   }
 
-  async get(id: string, wholesalerId: string | null, isAdmin: boolean) {
+  async get(id: string, dealerId: string | null, isAdmin: boolean) {
     const q = await this.prisma.quote.findUnique({
       where: { id },
       include: {
         lineItems: { include: { product: true } },
         selectedDesign: true,
-        wholesaler: { include: { template: true } },
+        dealer: { include: { template: true } },
       },
     });
     if (!q) throw new NotFoundException('Quote not found');
-    if (!isAdmin && q.wholesalerId !== wholesalerId) {
+    if (!isAdmin && q.dealerId !== dealerId) {
       throw new ForbiddenException('Not your quote');
     }
     return q;
   }
 
-  async remove(id: string, wholesalerId: string | null, isAdmin: boolean) {
+  async remove(id: string, dealerId: string | null, isAdmin: boolean) {
     const q = await this.prisma.quote.findUnique({ where: { id } });
     if (!q) throw new NotFoundException('Quote not found');
-    if (!isAdmin && q.wholesalerId !== wholesalerId) throw new ForbiddenException('Not your quote');
+    if (!isAdmin && q.dealerId !== dealerId) throw new ForbiddenException('Not your quote');
     // Only DRAFT quotes can be deleted - SENT/APPROVED quotes are part
     // of the audit trail and the customer may be looking at them.
     if (q.status !== QuoteStatus.DRAFT) {
@@ -138,7 +138,7 @@ export class QuotesService {
       include: {
         lineItems: true,
         selectedDesign: true,
-        wholesaler: { select: { name: true, logoUrl: true, template: true } },
+        dealer: { select: { name: true, logoUrl: true, template: true } },
       },
     });
     if (!q) throw new NotFoundException('Quote not found');
@@ -174,25 +174,25 @@ export class QuotesService {
       selectedDesign: q.selectedDesign ? { id: q.selectedDesign.id, name: q.selectedDesign.name, overlayUrl: q.selectedDesign.overlayUrl } : null,
       renderUrl: q.renderUrl,
       threeJsCode: q.threeJsCode || null,
-      // Public-safe wholesaler block: name + logo only. The wholesaler's
+      // Public-safe dealer block: name + logo only. The dealer's
       // direct contact email/phone is internal PII and must not be
       // exposed to anyone holding the approval link.
-      wholesaler: q.wholesaler ? {
-        name: q.wholesaler.name,
-        logoUrl: q.wholesaler.logoUrl,
-        termsHtml: q.wholesaler.template?.termsHtml || null,
+      dealer: q.dealer ? {
+        name: q.dealer.name,
+        logoUrl: q.dealer.logoUrl,
+        termsHtml: q.dealer.template?.termsHtml || null,
       } : null,
     };
   }
 
-  async create(wholesalerId: string | null, createdById: string, dto: CreateQuoteInput) {
-    // Admins (wholesalerId=null) do not own quotes. Refuse early
+  async create(dealerId: string | null, createdById: string, dto: CreateQuoteInput) {
+    // Admins (dealerId=null) do not own quotes. Refuse early
     // with a 403 rather than letting the Prisma transaction blow
-    // up on `priceOverride.findMany({ where: { wholesalerId: null }})`.
-    if (!wholesalerId) {
-      throw new ForbiddenException('Only wholesaler users can create quotes');
+    // up on `priceOverride.findMany({ where: { dealerId: null }})`.
+    if (!dealerId) {
+      throw new ForbiddenException('Only dealer users can create quotes');
     }
-    // Drafts can be created with zero segments - the wholesaler
+    // Drafts can be created with zero segments - the dealer
     // is still working on them. We only require segments when
     // sending the quote to the customer (enforced in update /
     // updateStatus below).
@@ -203,12 +203,12 @@ export class QuotesService {
       const products = productIds.length
         ? await tx.product.findMany({ where: { id: { in: productIds } } })
         : [];
-      // Defensive: if for any reason wholesalerId is null inside
+      // Defensive: if for any reason dealerId is null inside
       // the transaction (shouldn't happen now, but keeps the
       // service safe to call from internal contexts) skip the
       // price-override lookup rather than crash.
-      const overrides = productIds.length && wholesalerId
-        ? await tx.priceOverride.findMany({ where: { wholesalerId, productId: { in: productIds } } })
+      const overrides = productIds.length && dealerId
+        ? await tx.priceOverride.findMany({ where: { dealerId, productId: { in: productIds } } })
         : [];
       const priceMap = new Map<string, number>();
       for (const p of products) {
@@ -267,7 +267,7 @@ export class QuotesService {
       const quote = await tx.quote.create({
         data: {
           reference: this.nextReference(),
-          wholesalerId,
+          dealerId,
           createdById,
           customerName: dto.customerName,
           customerEmail: dto.customerEmail,
@@ -292,10 +292,10 @@ export class QuotesService {
     });
   }
 
-  async updateStatus(id: string, wholesalerId: string | null, isAdmin: boolean, status: QuoteStatus) {
+  async updateStatus(id: string, dealerId: string | null, isAdmin: boolean, status: QuoteStatus) {
     const q = await this.prisma.quote.findUnique({ where: { id } });
     if (!q) throw new NotFoundException('Quote not found');
-    if (!isAdmin && q.wholesalerId !== wholesalerId) throw new ForbiddenException('Not your quote');
+    if (!isAdmin && q.dealerId !== dealerId) throw new ForbiddenException('Not your quote');
     const allowed = ALLOWED_TRANSITIONS[q.status] || [];
     if (!allowed.includes(status)) {
       throw new BadRequestException(`Cannot move quote from ${q.status} to ${status}`);
@@ -363,7 +363,7 @@ export class QuotesService {
 
   /**
    * Customer-facing rejection. Marks the quote REJECTED and stores
-   * the reason in `notes` (wholesaler-visible). No signature
+   * the reason in `notes` (dealer-visible). No signature
    * required - rejection is a withdrawal of consent, not an
    * agreement. Returns the public-safe view.
    */
@@ -384,19 +384,19 @@ export class QuotesService {
   }
 
   /**
-   * Wholesaler-driven rejection. Same state transition as
+   * Dealer-driven rejection. Same state transition as
    * customer-driven, but attributed to the owner. The reason
    * (if any) goes into the notes for the audit trail.
    */
-  async rejectByOwner(id: string, reason: string | undefined, isAdmin: boolean, wholesalerId: string | null) {
+  async rejectByOwner(id: string, reason: string | undefined, isAdmin: boolean, dealerId: string | null) {
     const q = await this.prisma.quote.findUnique({ where: { id } });
     if (!q) throw new NotFoundException('Quote not found');
-    if (!isAdmin && q.wholesalerId !== wholesalerId) throw new ForbiddenException('Not your quote');
+    if (!isAdmin && q.dealerId !== dealerId) throw new ForbiddenException('Not your quote');
     if (q.status !== QuoteStatus.SENT) throw new BadRequestException(`Cannot reject a ${q.status} quote`);
     const trimmed = (reason || '').trim();
     if (trimmed.length > 2000) throw new BadRequestException('Reason is too long');
     const newNotes = trimmed
-      ? `${q.notes ? q.notes + '\n' : ''}[Wholesaler marked as rejected: ${trimmed.replace(/\n/g, ' ')}]`
+      ? `${q.notes ? q.notes + '\n' : ''}[Dealer marked as rejected: ${trimmed.replace(/\n/g, ' ')}]`
       : q.notes;
     return this.prisma.quote.update({
       where: { id },
@@ -409,12 +409,12 @@ export class QuotesService {
    * items and total are frozen (the customer may already be looking
    * at the approval link) so we refuse to mutate the commercial
    * fields. We do allow light updates (notes, renderUrl) even after
-   * SENT so the wholesaler can attach a finalised render.
+   * SENT so the dealer can attach a finalised render.
    */
-  async update(id: string, wholesalerId: string | null, isAdmin: boolean, dto: Partial<CreateQuoteInput>) {
+  async update(id: string, dealerId: string | null, isAdmin: boolean, dto: Partial<CreateQuoteInput>) {
     const q = await this.prisma.quote.findUnique({ where: { id } });
     if (!q) throw new NotFoundException('Quote not found');
-    if (!isAdmin && q.wholesalerId !== wholesalerId) throw new ForbiddenException('Not your quote');
+    if (!isAdmin && q.dealerId !== dealerId) throw new ForbiddenException('Not your quote');
 
     const isDraft = q.status === QuoteStatus.DRAFT;
     if (!isDraft) {
@@ -460,7 +460,7 @@ export class QuotesService {
         ? await this.prisma.product.findMany({ where: { id: { in: productIds } } })
         : [];
       const overrides = productIds.length
-        ? await this.prisma.priceOverride.findMany({ where: { wholesalerId: q.wholesalerId, productId: { in: productIds } } })
+        ? await this.prisma.priceOverride.findMany({ where: { dealerId: q.dealerId, productId: { in: productIds } } })
         : [];
       const priceMap = new Map<string, number>();
       for (const p of products) {
@@ -536,20 +536,20 @@ export class QuotesService {
   }
 
   /**
-   * Clone an existing quote into a fresh DRAFT for the same wholesaler.
+   * Clone an existing quote into a fresh DRAFT for the same dealer.
    * Useful when the customer wants a variant (e.g. swap from picket
    * to privacy) without starting from scratch. The clone starts as
-   * DRAFT so the wholesaler can edit freely. Line items are
+   * DRAFT so the dealer can edit freely. Line items are
    * recomputed (prices may have changed since the original).
    *
    * Returns a stripped-down view (no internal fields).
    */
-  async clone(id: string, wholesalerId: string | null, isAdmin: boolean) {
+  async clone(id: string, dealerId: string | null, isAdmin: boolean) {
     // fenceSegments is a Json column on the Quote model (not a
     // relation), so we fetch the full row.
     const src = await this.prisma.quote.findUnique({ where: { id } });
     if (!src) throw new NotFoundException('Quote not found');
-    if (!isAdmin && src.wholesalerId !== wholesalerId) throw new ForbiddenException('Not your quote');
+    if (!isAdmin && src.dealerId !== dealerId) throw new ForbiddenException('Not your quote');
     // Segments already have x1/y1/x2/y2/lengthM; preserve the per-segment
     // productId/heightOption/colorOption as the new defaults.
     const segments = ((src.fenceSegments as any[]) || []).map(s => ({
@@ -561,7 +561,7 @@ export class QuotesService {
     if (!segments.length) {
       throw new BadRequestException('Cannot clone a quote with no fence segments');
     }
-    return this.create(wholesalerId!, src.createdById, {
+    return this.create(dealerId!, src.createdById, {
       customerName: src.customerName,
       customerEmail: src.customerEmail,
       customerPhone: src.customerPhone,

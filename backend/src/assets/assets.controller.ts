@@ -25,7 +25,7 @@ import { Role } from '@prisma/client';
  *   - Signatures:     `sig-<quoteId>-<timestamp>.png`
  *
  * The quote UUID is embedded in the filename, so we extract it
- * and look up the quote. Only the owning wholesaler (or an
+ * and look up the quote. Only the owning dealer (or an
  * admin) may read the asset.
  */
 @UseGuards(AuthGuard('jwt'))
@@ -52,12 +52,12 @@ export class AssetsController {
 
     const quote = await this.prisma.quote.findUnique({
       where: { id: quoteId },
-      select: { wholesalerId: true },
+      select: { dealerId: true },
     });
     if (!quote) throw new NotFoundException('Asset not found');
 
     const isAdmin = u.role === Role.ADMIN;
-    const isOwner = quote.wholesalerId === u.wholesalerId;
+    const isOwner = quote.dealerId === u.dealerId;
     if (!isAdmin && !isOwner) throw new ForbiddenException('Not your asset');
 
     const dataDir = process.env.DATA_DIR || join(process.cwd(), 'data');

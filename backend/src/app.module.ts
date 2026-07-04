@@ -6,7 +6,7 @@ import { existsSync, mkdirSync } from 'fs';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
-import { WholesalersModule } from './wholesalers/wholesalers.module';
+import { DealersModule } from './dealers/dealers.module';
 import { ProductsModule } from './products/products.module';
 import { DesignsModule } from './designs/designs.module';
 import { QuotesModule } from './quotes/quotes.module';
@@ -26,7 +26,7 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env'] }),
     PrismaModule,
     AuthModule,
-    WholesalersModule,
+    DealersModule,
     ProductsModule,
     DesignsModule,
     QuotesModule,

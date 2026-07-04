@@ -7,7 +7,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 /**
  * Installation module.
  *
- * Owns the wholesaler-facing InstallationsController AND the
+ * Owns the dealer-facing InstallationsController AND the
  * public installer / customer controllers. Both controllers
  * share a single InstallationsService so the audit trail
  * (InstallationEvent) and lifecycle rules stay in one place.

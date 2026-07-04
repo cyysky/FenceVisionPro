@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { api, clearAuth, loadAuth, saveAuth } from './api';
 
-interface User { id: string; email: string; fullName: string; role: string; wholesalerId: string | null; }
+interface User { id: string; email: string; fullName: string; role: string; dealerId: string | null; }
 interface AuthCtx { user: User | null; token: string | null; login: (email: string, password: string) => Promise<void>; logout: () => void; }
 
 const Ctx = createContext<AuthCtx>(null as any);

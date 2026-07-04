@@ -15,7 +15,7 @@ export default function DashboardPage() {
   const toast = useToast();
   const nav = useNavigate();
   const [quotes, setQuotes] = useState<any[] | null>(null);
-  const [wholesalers, setWholesalers] = useState<any[]>([]);
+  const [dealers, setDealers] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('ALL');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
@@ -45,7 +45,7 @@ export default function DashboardPage() {
     if (user?.role === 'ADMIN') {
       try {
         const { data: w } = await api.get('/wholesalers');
-        setWholesalers(w);
+        setDealers(w);
       } catch { /* non-fatal */ }
     }
   })(); // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -103,7 +103,7 @@ export default function DashboardPage() {
             <Link to="/products" className="text-slate-600 hover:text-brand-700">Products</Link>
             <Link to="/designs" className="text-slate-600 hover:text-brand-700">Designs</Link>
             {user?.role === 'ADMIN' && (
-              <Link to="/wholesalers" className="text-slate-600 hover:text-brand-700">Wholesalers</Link>
+              <Link to="/wholesalers" className="text-slate-600 hover:text-brand-700">Dealers</Link>
             )}
           </nav>
           <div className="ml-auto flex items-center gap-2 text-sm">
@@ -127,7 +127,7 @@ export default function DashboardPage() {
             <QuickLink to="/products" label="Products" hint="Catalog & pricing" />
             <QuickLink to="/designs" label="Designs" hint="Fence styles & overlays" />
             {user?.role === 'ADMIN' && (
-              <QuickLink to="/wholesalers" label="Wholesalers" hint="Manage tenant accounts" />
+              <QuickLink to="/wholesalers" label="Dealers" hint="Manage tenant accounts" />
             )}
           </div>
         </section>
@@ -226,17 +226,17 @@ export default function DashboardPage() {
         {user?.role === 'ADMIN' && (
           <section>
             <div className="flex items-center mb-2">
-              <h2 className="text-lg font-semibold">Wholesalers</h2>
-              <span className="ml-2 text-xs text-slate-500">({wholesalers.length})</span>
+              <h2 className="text-lg font-semibold">Dealers</h2>
+              <span className="ml-2 text-xs text-slate-500">({dealers.length})</span>
               <Link to="/wholesalers" className="ml-auto text-sm text-brand-700 hover:underline">Manage</Link>
             </div>
-            {wholesalers.length === 0 ? (
+            {dealers.length === 0 ? (
               <div className="bg-white border rounded p-6 text-center text-slate-500 text-sm">
-                No wholesalers onboarded yet. <Link to="/wholesalers" className="text-brand-700 underline">Add the first one</Link>.
+                No dealers onboarded yet. <Link to="/wholesalers" className="text-brand-700 underline">Add the first one</Link>.
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                {wholesalers.slice(0, 6).map(w => (
+                {dealers.slice(0, 6).map(w => (
                   <div key={w.id} className="bg-white border rounded p-4 hover:border-brand-300 transition-colors">
                     <div className="font-medium">{w.name}</div>
                     <div className="text-xs text-slate-500">{w.contactEmail}</div>

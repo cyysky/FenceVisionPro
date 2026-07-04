@@ -4,7 +4,7 @@ export interface JwtPayload {
   sub: string;
   email: string;
   role: string;
-  wholesalerId: string | null;
+  dealerId: string | null;
 }
 
 export const CurrentUser = createParamDecorator(

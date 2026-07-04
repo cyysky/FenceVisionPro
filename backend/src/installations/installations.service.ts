@@ -21,7 +21,7 @@ const ALLOWED_PHOTO_MIMES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 /**
  * Installation traceability service.
  *
- * Owns the protected (wholesaler-facing) CRUD on Installation +
+ * Owns the protected (dealer-facing) CRUD on Installation +
  * the protected photo upload + the customer-link issue/revoke
  * flow. The public installer + customer controllers live in
  * `public-installations.controller.ts` and call into the same
@@ -37,12 +37,12 @@ export class InstallationsService {
   // -------------------------------------------------------------------------
 
   /**
-   * Convert the caller's JwtPayload to a (wholesalerId, isAdmin)
+   * Convert the caller's JwtPayload to a (dealerId, isAdmin)
    * pair. Mirrors the same pattern in QuotesService.
    */
   private authCtx(u: JwtPayload) {
     const isAdmin = u.role === Role.ADMIN;
-    return { wholesalerId: u.wholesalerId, isAdmin };
+    return { dealerId: u.dealerId, isAdmin };
   }
 
   /**
@@ -52,7 +52,7 @@ export class InstallationsService {
    * cross-tenant rows.
    */
   private async findOwned(id: string, u: JwtPayload, extra: any = {}) {
-    const { wholesalerId, isAdmin } = this.authCtx(u);
+    const { dealerId, isAdmin } = this.authCtx(u);
     const inst = await this.prisma.installation.findUnique({
       where: { id },
       include: { events: { orderBy: { occurredAt: 'asc' } }, photos: true, customerLinks: true },
@@ -60,8 +60,8 @@ export class InstallationsService {
     });
     if (!inst) throw new NotFoundException('Installation not found');
     if (!isAdmin) {
-      const q = await this.prisma.quote.findUnique({ where: { id: inst.quoteId }, select: { wholesalerId: true } });
-      if (!q || q.wholesalerId !== wholesalerId) {
+      const q = await this.prisma.quote.findUnique({ where: { id: inst.quoteId }, select: { dealerId: true } });
+      if (!q || q.dealerId !== dealerId) {
         throw new NotFoundException('Installation not found');
       }
     }
@@ -103,18 +103,18 @@ export class InstallationsService {
   }
 
   // -------------------------------------------------------------------------
-  // Protected (wholesaler) endpoints
+  // Protected (dealer) endpoints
   // -------------------------------------------------------------------------
 
   /**
    * List installations visible to the caller. Mirrors the
-   * QuotesService list() shape: wholesaler-scoped (admin sees
+   * QuotesService list() shape: dealer-scoped (admin sees
    * all), with optional status filter and a free-text search
    * across the linked quote's reference / customer name.
    */
   async list(u: JwtPayload, opts: { status?: InstallationStatusLiteral; q?: string; limit?: number }) {
-    const { wholesalerId, isAdmin } = this.authCtx(u);
-    const where: any = isAdmin ? {} : { quote: { wholesalerId: wholesalerId! } };
+    const { dealerId, isAdmin } = this.authCtx(u);
+    const where: any = isAdmin ? {} : { quote: { dealerId: dealerId! } };
     if (opts.status) where.status = opts.status;
     if (opts.q) {
       const q = opts.q.trim();
@@ -159,10 +159,10 @@ export class InstallationsService {
    * P2002 into a friendly 400.
    */
   async create(u: JwtPayload, dto: CreateInstallationDto) {
-    const { wholesalerId, isAdmin } = this.authCtx(u);
+    const { dealerId, isAdmin } = this.authCtx(u);
     const quote = await this.prisma.quote.findUnique({ where: { id: dto.quoteId } });
     if (!quote) throw new NotFoundException('Quote not found');
-    if (!isAdmin && quote.wholesalerId !== wholesalerId) {
+    if (!isAdmin && quote.dealerId !== dealerId) {
       throw new ForbiddenException('Not your quote');
     }
     // Only approved (or above) quotes can be turned into installations.
@@ -194,7 +194,7 @@ export class InstallationsService {
       u.role,
       u.email,
       dto.note ?? null,
-      { source: 'wholesaler_create' },
+      { source: 'dealer_create' },
     );
     return this.get(inst.id, u);
   }
@@ -410,7 +410,7 @@ export class InstallationsService {
   /**
    * Issue a new public customer link. The token is the only
    * secret; we never store anything user-supplied in the URL.
-   * Returns the token + a fully-qualified URL the wholesaler
+   * Returns the token + a fully-qualified URL the dealer
    * can copy/paste.
    */
   async createCustomerLink(

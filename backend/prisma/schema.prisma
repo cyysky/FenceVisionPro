@@ -1,4 +1,4 @@
-// FenceVisionPro data model
+// Yardex data model
 // Multi-tenant: every wholesaler is a tenant. Global catalog is shared,
 // prices are tenant-overridable per product.
 
@@ -12,9 +12,9 @@ datasource db {
 }
 
 enum Role {
-  ADMIN // FenceVisionPro staff (you)
-  WHOLESALER_OWNER // primary login for a wholesaler
-  WHOLESALER_STAFF // sub-user under a wholesaler
+  ADMIN // Yardex staff (you)
+  DEALER_OWNER // primary login for a wholesaler
+  DEALER_STAFF // sub-user under a wholesaler
 }
 
 enum QuoteStatus {
@@ -25,7 +25,7 @@ enum QuoteStatus {
   EXPIRED
 }
 
-model Wholesaler {
+model Dealer {
   id           String   @id @default(uuid())
   name         String
   slug         String   @unique
@@ -48,18 +48,18 @@ model User {
   email        String   @unique
   passwordHash String
   fullName     String
-  role         Role     @default(WHOLESALER_STAFF)
+  role         Role     @default(DEALER_STAFF)
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  wholesalerId String?
-  wholesaler   Wholesaler? @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
+  dealerId String?
+  dealer   Dealer? @relation(fields: [dealerId], references: [id], onDelete: Cascade)
 
   quotesCreated    Quote[]           @relation("CreatedBy")
   projectDocuments ProjectDocument[] @relation("ProjectDocumentUploader")
 
-  @@index([wholesalerId])
+  @@index([dealerId])
 }
 
 model Product {
@@ -85,13 +85,13 @@ model Product {
 
 model PriceOverride {
   id           String     @id @default(uuid())
-  wholesaler   Wholesaler @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
-  wholesalerId String
+  dealer   Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerId String
   product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
   productId    String
   price        Decimal    @db.Decimal(12, 2)
 
-  @@unique([wholesalerId, productId])
+  @@unique([dealerId, productId])
 }
 
 model Design {
@@ -126,8 +126,8 @@ model DesignProduct {
 
 model QuoteTemplate {
   id           String     @id @default(uuid())
-  wholesaler   Wholesaler @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
-  wholesalerId String     @unique
+  dealer   Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerId String     @unique
   headerHtml   String?    @db.Text
   footerHtml   String?    @db.Text
   termsHtml    String?    @db.Text
@@ -138,8 +138,8 @@ model QuoteTemplate {
 model Quote {
   id           String     @id @default(uuid())
   reference    String     @unique // human-friendly e.g. FVP-2026-0001
-  wholesaler   Wholesaler @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
-  wholesalerId String
+  dealer   Dealer @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerId String
 
   customerName   String
   customerEmail  String
@@ -180,7 +180,7 @@ model Quote {
   project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   installation Installation?
 
-  @@index([wholesalerId])
+  @@index([dealerId])
   @@index([status])
 }
 
@@ -239,8 +239,8 @@ enum ProjectVisualizationKind {
 
 model Project {
   id                String        @id @default(cuid())
-  wholesaler        Wholesaler    @relation(fields: [wholesalerId], references: [id], onDelete: Cascade)
-  wholesalerId      String
+  dealer        Dealer    @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerId      String
   customerName      String
   customerEmail     String?
   customerPhone     String?
@@ -261,7 +261,7 @@ model Project {
   visualizations ProjectVisualization[]
   quotes         Quote[]
 
-  @@index([wholesalerId])
+  @@index([dealerId])
   @@index([status])
   @@index([installScope])
   @@index([projectType])

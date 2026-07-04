@@ -59,7 +59,7 @@ export class AiService {
    * Generate a photorealistic fence image by compositing a textual
    * description of the customer's project with the chosen design. The
    * prompt is built on the server from concrete project parameters
-   * (style, color, height, surroundings) so the wholesaler doesn't
+   * (style, color, height, surroundings) so the dealer doesn't
    * have to write a prompt themselves.
    */
   async generateFenceImage(params: {
@@ -206,7 +206,7 @@ export class AiService {
 
   /**
    * Look at a user-uploaded photo of a house / yard and infer the
-   * fence parameters a wholesaler would otherwise have to type by
+   * fence parameters a dealer would otherwise have to type by
    * hand. Uses the multimodal chat-completions endpoint (default
    * model: qwen3.5-397b). The image is passed inline as a
    * data:image/...;base64,... content part so we don't need the
@@ -591,7 +591,7 @@ export class AiService {
    * Strip control characters and known prompt-injection patterns
    * from a free-text user field before pasting it into an image
    * prompt. The AI service is just a thin pass-through, so this
-   * is the only layer between a hostile wholesaler and the
+   * is the only layer between a hostile dealer and the
    * upstream model. We don't try to be exhaustive - just to
    * break the obvious attacks.
    */

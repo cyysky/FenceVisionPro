@@ -20,13 +20,13 @@ class CreateDesignDto {
 export class DesignsController {
   constructor(private svc: DesignsService) {}
 
-  // GET stays open to any authenticated user: the wholesaler
+  // GET stays open to any authenticated user: the dealer
   // picker on the new-quote page needs to list designs.
   @Get() list() { return this.svc.list(); }
   @Get(':id') get(@Param('id') id: string) { return this.svc.get(id); }
 
   // POST is admin-only: only Yardex staff can add to the
-  // global design library that every wholesaler sees.
+  // global design library that every dealer sees.
   @Roles(Role.ADMIN)
   @Post()
   create(@Body() dto: CreateDesignDto) {

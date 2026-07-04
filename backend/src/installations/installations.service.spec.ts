@@ -21,10 +21,10 @@ describe('InstallationsService', () => {
   let svc: InstallationsService;
   let prisma: any;
 
-  const ownerA = { sub: 'u-A', role: Role.WHOLESALER_OWNER, email: 'a@x.com', wholesalerId: 'wA' } as any;
-  const staffA = { sub: 'u-As', role: Role.WHOLESALER_STAFF, email: 'as@x.com', wholesalerId: 'wA' } as any;
-  const staffB = { sub: 'u-B', role: Role.WHOLESALER_STAFF, email: 'b@x.com', wholesalerId: 'wB' } as any;
-  const admin  = { sub: 'u-0', role: Role.ADMIN, email: 'root@x.com', wholesalerId: null } as any;
+  const ownerA = { sub: 'u-A', role: Role.DEALER_OWNER, email: 'a@x.com', dealerId: 'wA' } as any;
+  const staffA = { sub: 'u-As', role: Role.DEALER_STAFF, email: 'as@x.com', dealerId: 'wA' } as any;
+  const staffB = { sub: 'u-B', role: Role.DEALER_STAFF, email: 'b@x.com', dealerId: 'wB' } as any;
+  const admin  = { sub: 'u-0', role: Role.ADMIN, email: 'root@x.com', dealerId: null } as any;
 
   beforeEach(async () => {
     prisma = {
@@ -68,9 +68,9 @@ describe('InstallationsService', () => {
   // -------------------------------------------------------------------------
 
   describe('get (ownership)', () => {
-    it('returns the installation for the owning wholesaler', async () => {
+    it('returns the installation for the owning dealer', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED', events: [], photos: [], customerLinks: [] });
       prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', reference: 'FVP-1', customerName: 'Cust' });
       const out = await svc.get('i1', ownerA);
@@ -82,16 +82,16 @@ describe('InstallationsService', () => {
       await expect(svc.get('missing', ownerA)).rejects.toBeInstanceOf(NotFoundException);
     });
 
-    it("hides a wholesaler A installation from wholesaler B (404, not 403)", async () => {
+    it("hides a dealer A installation from dealer B (404, not 403)", async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i2', quoteId: 'q2' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       await expect(svc.get('i2', staffB)).rejects.toBeInstanceOf(NotFoundException);
     });
 
     it('lets admin read any installation', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i3', quoteId: 'q3' });
       // quote lookup skipped for admin (returns undefined -> not isAdmin)
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i3', quoteId: 'q3', events: [], photos: [], customerLinks: [] });
       prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q3', reference: 'FVP-3', customerName: 'Cust' });
       const out = await svc.get('i3', admin);
@@ -104,11 +104,11 @@ describe('InstallationsService', () => {
   // -------------------------------------------------------------------------
 
   describe('list', () => {
-    it('scopes results to the caller\'s wholesaler for non-admin', async () => {
+    it('scopes results to the caller\'s dealer for non-admin', async () => {
       prisma.installation.findMany.mockResolvedValueOnce([]);
       await svc.list(staffA, {});
       expect(prisma.installation.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { quote: { wholesalerId: 'wA' } } }),
+        expect.objectContaining({ where: { quote: { dealerId: 'wA' } } }),
       );
     });
 
@@ -124,7 +124,7 @@ describe('InstallationsService', () => {
       prisma.installation.findMany.mockResolvedValueOnce([]);
       await svc.list(ownerA, { status: 'IN_PROGRESS' });
       expect(prisma.installation.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { quote: { wholesalerId: 'wA' }, status: 'IN_PROGRESS' } }),
+        expect.objectContaining({ where: { quote: { dealerId: 'wA' }, status: 'IN_PROGRESS' } }),
       );
     });
   });
@@ -135,12 +135,12 @@ describe('InstallationsService', () => {
 
   describe('create', () => {
     it('creates a SCHEDULED installation for an APPROVED quote', async () => {
-      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', wholesalerId: 'wA', status: 'APPROVED' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', dealerId: 'wA', status: 'APPROVED' });
       prisma.installation.create.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
       prisma.installationEvent.create.mockResolvedValueOnce({});
       // get() follow-up
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED', events: [], photos: [], customerLinks: [] });
       prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', reference: 'FVP-1', customerName: 'Cust' });
       const out = await svc.create(ownerA, { quoteId: 'q1' });
@@ -154,20 +154,20 @@ describe('InstallationsService', () => {
     });
 
     it('rejects when the quote is not APPROVED yet', async () => {
-      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', wholesalerId: 'wA', status: 'SENT' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', dealerId: 'wA', status: 'SENT' });
       await expect(svc.create(ownerA, { quoteId: 'q1' })).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('returns a friendly 400 if an installation already exists for the quote (P2002)', async () => {
-      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', wholesalerId: 'wA', status: 'APPROVED' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', dealerId: 'wA', status: 'APPROVED' });
       const err: any = new Error('Unique constraint');
       err.code = 'P2002';
       prisma.installation.create.mockRejectedValueOnce(err);
       await expect(svc.create(ownerA, { quoteId: 'q1' })).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('throws Forbidden when the quote belongs to a different wholesaler', async () => {
-      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', wholesalerId: 'wB', status: 'APPROVED' });
+    it('throws Forbidden when the quote belongs to a different dealer', async () => {
+      prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', dealerId: 'wB', status: 'APPROVED' });
       await expect(svc.create(staffA, { quoteId: 'q1' })).rejects.toBeInstanceOf(ForbiddenException);
     });
   });
@@ -179,12 +179,12 @@ describe('InstallationsService', () => {
   describe('transition', () => {
     it('allows SCHEDULED -> IN_PROGRESS and stamps startedAt', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.installation.update.mockResolvedValueOnce({});
       prisma.installationEvent.create.mockResolvedValueOnce({});
       // get() follow-up: findOwned (findUnique) + ownership check (quote.findUnique) + final quote fetch
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'IN_PROGRESS', events: [], photos: [], customerLinks: [] });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.quote.findUnique.mockResolvedValueOnce({ id: 'q1', reference: 'FVP-1', customerName: 'Cust' });
       await svc.transition('i1', ownerA, { toStatus: 'IN_PROGRESS' });
       expect(prisma.installation.update).toHaveBeenCalledWith(
@@ -194,13 +194,13 @@ describe('InstallationsService', () => {
 
     it('rejects an illegal transition (SCHEDULED -> COMPLETED)', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       await expect(svc.transition('i1', ownerA, { toStatus: 'COMPLETED' })).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('rejects any transition out of INSPECTED (terminal)', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'INSPECTED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       await expect(svc.transition('i1', ownerA, { toStatus: 'CANCELLED' })).rejects.toBeInstanceOf(BadRequestException);
     });
   });
@@ -214,7 +214,7 @@ describe('InstallationsService', () => {
 
     it('rejects files larger than 25 MB', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'IN_PROGRESS' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       const tooBig = Buffer.alloc(26 * 1024 * 1024);
       const file = { originalname: 'big.jpg', buffer: tooBig, size: tooBig.length, mimetype: 'image/jpeg' };
       await expect(svc.uploadPhoto('i1', ownerA, file, { kind: 'BEFORE' }))
@@ -223,7 +223,7 @@ describe('InstallationsService', () => {
 
     it('rejects unsupported mime types', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'IN_PROGRESS' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       const file = { originalname: 'x.gif', buffer: validJpeg, size: validJpeg.length, mimetype: 'image/gif' };
       await expect(svc.uploadPhoto('i1', ownerA, file, { kind: 'BEFORE' }))
         .rejects.toThrow(/Unsupported mime type/);
@@ -231,7 +231,7 @@ describe('InstallationsService', () => {
 
     it('persists a valid image and writes an audit event', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'IN_PROGRESS' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.installationPhoto.create.mockResolvedValueOnce({
         id: 'p1', kind: 'DURING', caption: 'Mid-job', originalFilename: 'a.jpg',
         mimeType: 'image/jpeg', sizeBytes: validJpeg.length, uploadedByKind: 'WHOLESALER',
@@ -255,7 +255,7 @@ describe('InstallationsService', () => {
   describe('customer links', () => {
     it('issues a link with a 64-char hex token', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       // Capture the token the service generated, then echo it back.
       prisma.publicCustomerLink.create.mockImplementationOnce((args: any) => ({
         id: 'l1', token: args.data.token, purpose: 'ALL',
@@ -271,7 +271,7 @@ describe('InstallationsService', () => {
 
     it('refuses to double-revoke', async () => {
       prisma.installation.findUnique.mockResolvedValueOnce({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
-      prisma.quote.findUnique.mockResolvedValueOnce({ wholesalerId: 'wA' });
+      prisma.quote.findUnique.mockResolvedValueOnce({ dealerId: 'wA' });
       prisma.publicCustomerLink.findUnique.mockResolvedValueOnce({ id: 'l1', installationId: 'i1', revokedAt: new Date() });
       const out = await svc.revokeCustomerLink('i1', 'l1', ownerA);
       expect(out).toEqual({ ok: true, alreadyRevoked: true });

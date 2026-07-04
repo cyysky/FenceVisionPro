@@ -6,16 +6,16 @@ export class ProductsService {
   constructor(private prisma: PrismaService) {}
 
   /**
-   * Returns the product list with prices resolved for the given wholesaler.
+   * Returns the product list with prices resolved for the given dealer.
    * Falls back to basePrice if no override exists.
    */
-  async listForWholesaler(wholesalerId: string | null) {
+  async listForDealer(dealerId: string | null) {
     const products = await this.prisma.product.findMany({
       where: { isActive: true },
       orderBy: [{ category: 'asc' }, { name: 'asc' }],
     });
-    const overrides = wholesalerId
-      ? await this.prisma.priceOverride.findMany({ where: { wholesalerId } })
+    const overrides = dealerId
+      ? await this.prisma.priceOverride.findMany({ where: { dealerId } })
       : [];
     const map = new Map(overrides.map(o => [o.productId, Number(o.price)]));
     return products.map(p => ({
@@ -25,11 +25,11 @@ export class ProductsService {
     }));
   }
 
-  async get(id: string, wholesalerId: string | null) {
+  async get(id: string, dealerId: string | null) {
     const p = await this.prisma.product.findUnique({ where: { id } });
     if (!p) throw new NotFoundException('Product not found');
-    const override = wholesalerId
-      ? await this.prisma.priceOverride.findUnique({ where: { wholesalerId_productId: { wholesalerId, productId: id } } })
+    const override = dealerId
+      ? await this.prisma.priceOverride.findUnique({ where: { dealerId_productId: { dealerId, productId: id } } })
       : null;
     return { ...p, basePrice: Number(p.basePrice), effectivePrice: override ? Number(override.price) : Number(p.basePrice) };
   }
@@ -37,23 +37,23 @@ export class ProductsService {
   // admin
   create(data: any) { return this.prisma.product.create({ data }); }
   update(id: string, data: any) { return this.prisma.product.update({ where: { id }, data }); }
-  setOverride(wholesalerId: string, productId: string, price: number) {
+  setOverride(dealerId: string, productId: string, price: number) {
     return this.prisma.priceOverride.upsert({
-      where: { wholesalerId_productId: { wholesalerId, productId } },
+      where: { dealerId_productId: { dealerId, productId } },
       update: { price },
-      create: { wholesalerId, productId, price },
+      create: { dealerId, productId, price },
     });
   }
 
   /**
-   * Clear the per-wholesaler price override so the product reverts
+   * Clear the per-dealer price override so the product reverts
    * to its basePrice for that tenant. Returns the count of deleted
    * rows (0 if no override existed).
    */
-  async clearOverride(wholesalerId: string, productId: string) {
+  async clearOverride(dealerId: string, productId: string) {
     try {
       await this.prisma.priceOverride.delete({
-        where: { wholesalerId_productId: { wholesalerId, productId } },
+        where: { dealerId_productId: { dealerId, productId } },
       });
       return { ok: true, removed: true };
     } catch (e: any) {
@@ -64,12 +64,12 @@ export class ProductsService {
   }
 
   /**
-   * List every existing price override for a wholesaler. Useful for
+   * List every existing price override for a dealer. Useful for
    * the admin UI to show which products are customised.
    */
-  async listOverrides(wholesalerId: string) {
+  async listOverrides(dealerId: string) {
     return this.prisma.priceOverride.findMany({
-      where: { wholesalerId },
+      where: { dealerId },
       include: { product: { select: { id: true, sku: true, name: true, basePrice: true } } },
       orderBy: { product: { name: 'asc' } },
     });

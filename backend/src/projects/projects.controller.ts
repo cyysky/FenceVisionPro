@@ -21,7 +21,7 @@ const ALLOWED_PROJECT_MIMES = new Set([
   'image/png', 'image/jpeg', 'image/webp', 'application/pdf',
 ]);
 
-const ROLES = [Role.ADMIN, Role.WHOLESALER_OWNER, Role.WHOLESALER_STAFF];
+const ROLES = [Role.ADMIN, Role.DEALER_OWNER, Role.DEALER_STAFF];
 
 /**
  * End Customer Project controller. The endpoint surface is grouped

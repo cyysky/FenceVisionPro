@@ -26,11 +26,11 @@ export class PdfService {
       if (quote.validUntil) doc.text(`Valid until: ${new Date(quote.validUntil).toLocaleDateString()}`);
       doc.moveDown(0.5);
 
-      // Wholesaler block
-      doc.fillColor('#0f172a').fontSize(12).text(quote.wholesaler?.name || 'Wholesaler', { continued: false });
+      // Dealer block
+      doc.fillColor('#0f172a').fontSize(12).text(quote.dealer?.name || 'Dealer', { continued: false });
       doc.fontSize(9).fillColor('#475569');
-      if (quote.wholesaler?.contactEmail) doc.text(quote.wholesaler.contactEmail);
-      if (quote.wholesaler?.contactPhone) doc.text(quote.wholesaler.contactPhone);
+      if (quote.dealer?.contactEmail) doc.text(quote.dealer.contactEmail);
+      if (quote.dealer?.contactPhone) doc.text(quote.dealer.contactPhone);
       doc.moveDown(0.5);
 
       // Customer block
@@ -112,7 +112,7 @@ export class PdfService {
       }
 
       // Footer / terms
-      const terms = quote.wholesaler?.template?.termsHtml;
+      const terms = quote.dealer?.template?.termsHtml;
       if (terms) {
         doc.addPage();
         doc.fontSize(10).fillColor('#0f172a').text('Terms & Conditions');

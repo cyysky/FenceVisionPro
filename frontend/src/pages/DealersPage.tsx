@@ -5,14 +5,14 @@ import { useToast } from '../components/ui/Toast';
 import { confirm } from '../components/ui/Confirm';
 import { SkeletonRows } from '../components/ui/Skeleton';
 
-type Wholesaler = {
+type Dealer = {
   id: string; name: string; slug: string; contactEmail: string; contactPhone?: string;
   createdAt: string; isActive: boolean; users?: { id: string; email: string; fullName: string; role: string; isActive?: boolean }[];
 };
 
-export default function WholesalersPage() {
+export default function DealersPage() {
   const toast = useToast();
-  const [list, setList] = useState<Wholesaler[] | null>(null);
+  const [list, setList] = useState<Dealer[] | null>(null);
   // Inline add-staff form (replaces the old prompt() chain).
   const [addStaffFor, setAddStaffFor] = useState<string | null>(null);
   const [staffDraft, setStaffDraft] = useState({ email: '', fullName: '', password: '' });
@@ -46,7 +46,7 @@ export default function WholesalersPage() {
     setErr(null); setMsg(null); setBusy(true);
     try {
       const { data } = await api.post('/wholesalers', form);
-      toast.success(`Created ${data.wholesaler.name} – owner login: ${data.owner.email}`);
+      toast.success(`Created ${data.dealer.name} – owner login: ${data.owner.email}`);
       setForm({ name: '', slug: '', contactEmail: '', contactPhone: '', ownerEmail: '', ownerPassword: '', ownerName: '' });
       await refresh();
     } catch (e: any) {
@@ -55,30 +55,30 @@ export default function WholesalersPage() {
     } finally { setBusy(false); }
   }
 
-  async function toggleExpand(w: Wholesaler) {
+  async function toggleExpand(w: Dealer) {
     if (expanded[w.id]) { setExpanded(s => ({ ...s, [w.id]: false })); return; }
-    await reloadWholesaler(w.id);
+    await reloadDealer(w.id);
     setExpanded(s => ({ ...s, [w.id]: true }));
   }
 
   /**
-   * Refetch a single wholesaler (with its users) and merge into the
+   * Refetch a single dealer (with its users) and merge into the
    * list. Used by the toggle/refetch patterns below; replaces the
    * old "call toggle twice" hack which depended on React state
    * timing.
    */
-  async function reloadWholesaler(id: string) {
-    const { data } = await api.get(`/wholesalers/${id}`);
+  async function reloadDealer(id: string) {
+    const { data } = await api.get(`/dealers/${id}`);
     setList(prev => (prev || []).map(x => x.id === id ? { ...x, ...data } : x));
   }
 
-  async function submitStaff(w: Wholesaler) {
+  async function submitStaff(w: Dealer) {
     if (!/^\S+@\S+\.\S+$/.test(staffDraft.email)) { toast.error('Valid email required'); return; }
     if (!staffDraft.fullName.trim()) { toast.error('Full name required'); return; }
     if (staffDraft.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
     try {
-      await api.post(`/wholesalers/${w.id}/staff`, staffDraft);
-      await reloadWholesaler(w.id);
+      await api.post(`/dealers/${w.id}/staff`, staffDraft);
+      await reloadDealer(w.id);
       setAddStaffFor(null);
       setStaffDraft({ email: '', fullName: '', password: '' });
       toast.success('Staff added');
@@ -87,10 +87,10 @@ export default function WholesalersPage() {
     }
   }
 
-  async function submitReset(w: Wholesaler, staffId: string) {
+  async function submitReset(w: Dealer, staffId: string) {
     if (resetDraft.length < 8) { toast.error('Password must be at least 8 characters'); return; }
     try {
-      await api.post(`/wholesalers/${w.id}/staff/${staffId}/reset-password`, { newPassword: resetDraft });
+      await api.post(`/dealers/${w.id}/staff/${staffId}/reset-password`, { newPassword: resetDraft });
       setResetFor(null); setResetDraft('');
       toast.success('Password reset - user must log in again');
     } catch (e: any) {
@@ -98,13 +98,13 @@ export default function WholesalersPage() {
     }
   }
 
-  async function toggleStaffActive(w: Wholesaler, staffId: string, currentlyActive: boolean) {
+  async function toggleStaffActive(w: Dealer, staffId: string, currentlyActive: boolean) {
     const action = currentlyActive ? 'deactivate' : 'reactivate';
     if (!(await confirm({ title: `${action.charAt(0).toUpperCase() + action.slice(1)} staff?`, message: `This will ${action} the staff member's access to the system.`, confirmLabel: action.charAt(0).toUpperCase() + action.slice(1), variant: currentlyActive ? 'danger' : 'default' }))) return;
     const path = currentlyActive ? 'deactivate' : 'reactivate';
     try {
-      await api.post(`/wholesalers/${w.id}/staff/${staffId}/${path}`);
-      await reloadWholesaler(w.id);
+      await api.post(`/dealers/${w.id}/staff/${staffId}/${path}`);
+      await reloadDealer(w.id);
       toast.success(`Staff ${action}d`);
     } catch (e: any) {
       const m = e?.response?.data?.message;
@@ -116,11 +116,11 @@ export default function WholesalersPage() {
     <div className="min-h-full">
       <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center flex-wrap gap-2">
         <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">&larr; Back</Link>
-        <h1 className="font-bold">Wholesalers</h1>
+        <h1 className="font-bold">Dealers</h1>
       </header>
       <main className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">
         <section className="bg-white border rounded p-4">
-          <h2 className="font-semibold mb-3">Onboard new wholesaler</h2>
+          <h2 className="font-semibold mb-3">Onboard new dealer</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
             <Input label="Company name *" v={form.name} on={(v: string) => setForm({ ...form, name: v })} />
             <Input label="URL slug * (lowercase, hyphens)" v={form.slug} on={(v: string) => setForm({ ...form, slug: v.toLowerCase() })} />
@@ -135,7 +135,7 @@ export default function WholesalersPage() {
             {err && <span className="text-sm text-red-700">{err}</span>}
             <button onClick={create} disabled={busy || !isFormValid()}
               className="ml-auto px-3 py-1.5 bg-brand-600 text-white rounded text-sm disabled:opacity-50">
-              {busy ? 'Creating…' : 'Create wholesaler'}
+              {busy ? 'Creating…' : 'Create dealer'}
             </button>
           </div>
         </section>
@@ -200,7 +200,7 @@ export default function WholesalersPage() {
                                 <tr key={u.id} className="border-t border-slate-200">
                                   <td className="py-1">{u.fullName}</td>
                                   <td className="font-mono">{u.email}</td>
-                                  <td>{u.role.replace('WHOLESALER_', '')}</td>
+                                  <td>{u.role.replace('DEALER_', '')}</td>
                                   <td>
                                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${u.isActive === false ? 'bg-slate-200 text-slate-600' : 'bg-emerald-100 text-emerald-700'}`}>
                                       {u.isActive === false ? 'Inactive' : 'Active'}

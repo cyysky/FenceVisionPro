@@ -40,7 +40,7 @@ describe('QuotesService - status transitions', () => {
     // attach one when needed.
     const hasSegments = to === QuoteStatus.SENT;
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: from, approvedAt: null,
+      id: 'q1', dealerId: 'w1', status: from, approvedAt: null,
       fenceSegments: hasSegments
         ? [{ x1: 0, y1: 0, x2: 10, y2: 0, lengthM: 10, productId: 'p1' }]
         : [],
@@ -63,7 +63,7 @@ describe('QuotesService - status transitions', () => {
 
   it('refuses DRAFT -> SENT when the quote has no segments', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: QuoteStatus.DRAFT, approvedAt: null, fenceSegments: [],
+      id: 'q1', dealerId: 'w1', status: QuoteStatus.DRAFT, approvedAt: null, fenceSegments: [],
     });
     await expect(svc.updateStatus('q1', 'w1', false, QuoteStatus.SENT))
       .rejects.toThrow(/at least one fence segment/i);
@@ -71,7 +71,7 @@ describe('QuotesService - status transitions', () => {
 
   it('refuses DRAFT -> SENT when no segment references a product', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: QuoteStatus.DRAFT, approvedAt: null,
+      id: 'q1', dealerId: 'w1', status: QuoteStatus.DRAFT, approvedAt: null,
       fenceSegments: [{ x1: 0, y1: 0, x2: 10, y2: 0, lengthM: 10 /* no productId */ }],
     });
     await expect(svc.updateStatus('q1', 'w1', false, QuoteStatus.SENT))
@@ -91,24 +91,24 @@ describe('QuotesService - remove', () => {
     svc = mod.get(QuotesService);
   });
   it('allows deleting a DRAFT quote', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', wholesalerId: 'w1', status: 'DRAFT' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'w1', status: 'DRAFT' });
     prisma.quote.delete.mockResolvedValue({ id: 'q1' });
     await expect(svc.remove('q1', 'w1', false)).resolves.toEqual({ ok: true });
   });
   it('refuses to delete a SENT quote', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', wholesalerId: 'w1', status: 'SENT' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'w1', status: 'SENT' });
     await expect(svc.remove('q1', 'w1', false)).rejects.toThrow(/Cannot delete a SENT/);
   });
   it('refuses to delete an APPROVED quote', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', wholesalerId: 'w1', status: 'APPROVED' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'w1', status: 'APPROVED' });
     await expect(svc.remove('q1', 'w1', false)).rejects.toThrow(/Cannot delete an APPROVED/);
   });
   it('blocks cross-tenant delete', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', wholesalerId: 'OTHER', status: 'DRAFT' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'OTHER', status: 'DRAFT' });
     await expect(svc.remove('q1', 'w1', false)).rejects.toThrow(/Not your quote/);
   });
   it('allows admin to delete any tenant quote', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', wholesalerId: 'OTHER', status: 'DRAFT' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'OTHER', status: 'DRAFT' });
     prisma.quote.delete.mockResolvedValue({ id: 'q1' });
     await expect(svc.remove('q1', 'w1', true)).resolves.toEqual({ ok: true });
   });
@@ -131,7 +131,7 @@ describe('QuotesService - public visibility', () => {
   it('rejects public view of DRAFT quotes', async () => {
     prisma.quote.findUnique.mockResolvedValue({
       id: 'q1', status: QuoteStatus.DRAFT, lineItems: [],
-      wholesaler: { name: 'X', contactEmail: 'a', contactPhone: null, logoUrl: null, template: null },
+      dealer: { name: 'X', contactEmail: 'a', contactPhone: null, logoUrl: null, template: null },
     });
     await expect(svc.getPublic('q1')).rejects.toThrow(/not available/);
   });
@@ -140,7 +140,7 @@ describe('QuotesService - public visibility', () => {
     prisma.quote.findUnique.mockResolvedValue({
       id: 'q1', status: QuoteStatus.SENT, lineItems: [], subtotal: 0, taxRate: 0, taxAmount: 0, total: 0,
       customerName: 'X', projectAddress: null, validUntil: null, renderUrl: null,
-      selectedDesign: null, wholesaler: { name: 'X', contactEmail: 'a', contactPhone: null, logoUrl: null, template: null },
+      selectedDesign: null, dealer: { name: 'X', contactEmail: 'a', contactPhone: null, logoUrl: null, template: null },
     });
     const r = await svc.getPublic('q1');
     expect(r.status).toBe(QuoteStatus.SENT);
@@ -235,7 +235,7 @@ describe('QuotesService - line item derivation (via create)', () => {
     expect(Number(capturedCreateArgs.data.lineItems.create[0].lineTotal)).toBe(250);
   });
 
-  it('uses per-wholesaler price override', async () => {
+  it('uses per-dealer price override', async () => {
     prisma.product.findMany.mockResolvedValue([
       { id: 'p1', name: 'Panel', unit: 'pcs', basePrice: 100 },
     ]);
@@ -249,14 +249,14 @@ describe('QuotesService - line item derivation (via create)', () => {
     expect(capturedCreateArgs.data.lineItems.create[0].unitPrice).toBe(80);
   });
 
-  it('refuses to create a quote when wholesalerId is null (admin caller)', async () => {
+  it('refuses to create a quote when dealerId is null (admin caller)', async () => {
     // Admins do not own quotes - the service must refuse the
     // request with a ForbiddenException before reaching the
-    // Prisma transaction (which would crash on `wholesalerId:
+    // Prisma transaction (which would crash on `dealerId:
     // null`).
     await expect(
       svc.create(null as any, 'admin-uid', { fenceSegments: [{ x1: 0, y1: 0, x2: 1, y2: 0, lengthM: 1, productId: 'p1' }] } as any),
-    ).rejects.toThrow(/Only wholesaler users can create quotes/);
+    ).rejects.toThrow(/Only dealer users can create quotes/);
   });
 
   it('computes tax correctly', async () => {
@@ -277,7 +277,7 @@ describe('QuotesService - line item derivation (via create)', () => {
     expect(Number(capturedCreateArgs.data.total)).toBe(108.25);
   });
 
-  it('allows creating a draft with no fence segments (wholesaler can finish later)', async () => {
+  it('allows creating a draft with no fence segments (dealer can finish later)', async () => {
     // Set up the $transaction mock for THIS test (it isn't in
     // the outer beforeEach since most create() tests reuse the
     // larger line-item describe).
@@ -354,7 +354,7 @@ describe('QuotesService - update()', () => {
 
   it('updates a DRAFT quote (notes only) without touching line items', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: 'DRAFT', taxRate: '0',
+      id: 'q1', dealerId: 'w1', status: 'DRAFT', taxRate: '0',
       subtotal: '1000', taxAmount: '0', total: '1000',
     });
     // $transaction(fn) -> run fn with prisma as the tx proxy
@@ -369,7 +369,7 @@ describe('QuotesService - update()', () => {
 
   it('rejects commercial field edits on a SENT quote', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: 'SENT',
+      id: 'q1', dealerId: 'w1', status: 'SENT',
     });
     prisma.$transaction.mockImplementation(async (fn: any) => fn(prisma));
     prisma.quote.update.mockResolvedValue({ id: 'q1' });
@@ -381,7 +381,7 @@ describe('QuotesService - update()', () => {
 
   it('recomputes line items when fenceSegments change on a DRAFT', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: 'DRAFT', taxRate: '0',
+      id: 'q1', dealerId: 'w1', status: 'DRAFT', taxRate: '0',
       subtotal: '0', taxAmount: '0', total: '0',
     });
     prisma.product.findMany.mockResolvedValue([{ id: 'p1', name: 'Picket 4ft', unit: 'pcs', basePrice: 64 }]);
@@ -400,7 +400,7 @@ describe('QuotesService - update()', () => {
 
   it('rejects empty fenceSegments on update', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: 'DRAFT',
+      id: 'q1', dealerId: 'w1', status: 'DRAFT',
     });
     await expect(svc.update('q1', 'w1', false, { fenceSegments: [] }))
       .rejects.toThrow(/At least one fence segment/);
@@ -440,7 +440,7 @@ describe('QuotesService - expireOverdue()', () => {
 /**
  * Public surface tests - make sure the customer-facing API never
  * leaks PII (internal notes, raw floor plan, signature URL,
- * wholesaler direct contact info, raw fence coordinates).
+ * dealer direct contact info, raw fence coordinates).
  */
 describe('QuotesService - getPublic() and approvePublic() PII safety', () => {
   let svc: QuotesService;
@@ -468,11 +468,11 @@ describe('QuotesService - getPublic() and approvePublic() PII safety', () => {
     selectedDesignId: 'design-picket', renderUrl: '/static/renders/x.png',
     validUntil: null, approvedAt: null, approvedSignatureUrl: '/static/signatures/x.png',
     subtotal: '1000', taxRate: '8.5', taxAmount: '85', total: '1085',
-    wholesalerId: 'w1', createdById: 'u1', createdAt: new Date(), updatedAt: new Date(),
+    dealerId: 'w1', createdById: 'u1', createdAt: new Date(), updatedAt: new Date(),
     fenceSegments: [],
     lineItems: [{ description: 'Picket 4ft', quantity: 4, unitPrice: 64, lineTotal: 256, heightOption: '4ft', colorOption: 'White' }],
     selectedDesign: { id: 'design-picket', name: 'Picket', overlayUrl: '/static/overlays/p.png', style: 'Picket', description: 'd', config: {}, isActive: true, createdAt: new Date(), updatedAt: new Date() },
-    wholesaler: { name: 'Demo Fence Co', contactEmail: 'owner@demo.com', contactPhone: '+1-555-0100', logoUrl: null, template: { id: 't1', wholesalerId: 'w1', headerHtml: null, footerHtml: null, termsHtml: '50% deposit', accentColor: '#000', updatedAt: new Date() } },
+    dealer: { name: 'Demo Fence Co', contactEmail: 'owner@demo.com', contactPhone: '+1-555-0100', logoUrl: null, template: { id: 't1', dealerId: 'w1', headerHtml: null, footerHtml: null, termsHtml: '50% deposit', accentColor: '#000', updatedAt: new Date() } },
   };
 
   it('getPublic() strips notes, customerEmail, customerPhone, floorPlanUrl, signatureUrl, fenceSegments', async () => {
@@ -490,12 +490,12 @@ describe('QuotesService - getPublic() and approvePublic() PII safety', () => {
     expect(out).not.toHaveProperty('approvedSignatureUrl');
     expect(out).not.toHaveProperty('fenceSegments');
     expect(out).not.toHaveProperty('createdById');
-    expect(out).not.toHaveProperty('wholesalerId');
-    // Wholesaler contact info must not leak
-    expect(out.wholesaler).toBeTruthy();
-    expect(out.wholesaler).not.toHaveProperty('contactEmail');
-    expect(out.wholesaler).not.toHaveProperty('contactPhone');
-    expect(out.wholesaler.name).toBe('Demo Fence Co');
+    expect(out).not.toHaveProperty('dealerId');
+    // Dealer contact info must not leak
+    expect(out.dealer).toBeTruthy();
+    expect(out.dealer).not.toHaveProperty('contactEmail');
+    expect(out.dealer).not.toHaveProperty('contactPhone');
+    expect(out.dealer.name).toBe('Demo Fence Co');
   });
 
   it('getPublic() refuses non-SENT/non-APPROVED/non-REJECTED quotes', async () => {
@@ -566,7 +566,7 @@ describe('QuotesService - clone()', () => {
 
   it('refuses to clone across tenants', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w2', status: 'APPROVED',
+      id: 'q1', dealerId: 'w2', status: 'APPROVED',
       fenceSegments: [{ x1: 0, y1: 0, x2: 5, y2: 0, lengthM: 5, productId: 'p1' }],
     });
     await expect(svc.clone('q1', 'w1', false)).rejects.toThrow(/Not your quote/);
@@ -574,14 +574,14 @@ describe('QuotesService - clone()', () => {
 
   it('refuses to clone a quote with no segments', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', wholesalerId: 'w1', status: 'DRAFT', fenceSegments: [],
+      id: 'q1', dealerId: 'w1', status: 'DRAFT', fenceSegments: [],
     });
     await expect(svc.clone('q1', 'w1', false)).rejects.toThrow(/no fence segments/);
   });
 
-  it('clones a quote into a new DRAFT for the same wholesaler', async () => {
+  it('clones a quote into a new DRAFT for the same dealer', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', reference: 'FVP-1', wholesalerId: 'w1', createdById: 'u1',
+      id: 'q1', reference: 'FVP-1', dealerId: 'w1', createdById: 'u1',
       status: 'APPROVED',
       customerName: 'Alice', customerEmail: 'a@x.com', customerPhone: null,
       projectAddress: null, notes: null, taxRate: '8.5',
@@ -625,7 +625,7 @@ describe('QuotesService - reject (public and owner)', () => {
     prisma.quote.findUnique
       .mockResolvedValueOnce({ id: 'q1', status: 'SENT', notes: null })
       .mockResolvedValueOnce({ id: 'q1', status: 'REJECTED', notes: 'note', validUntil: null,
-        customerName: 'A', projectAddress: null, lineItems: [], selectedDesign: null, wholesaler: null });
+        customerName: 'A', projectAddress: null, lineItems: [], selectedDesign: null, dealer: null });
     prisma.quote.update.mockResolvedValue({});
     await svc.rejectPublic('q1', 'Too expensive');
     const updateArgs = prisma.quote.update.mock.calls[0][0];
@@ -643,24 +643,24 @@ describe('QuotesService - reject (public and owner)', () => {
     await expect(svc.rejectPublic('q1', 'x'.repeat(2001))).rejects.toThrow(/too long/);
   });
 
-  it('rejectByOwner marks a SENT quote REJECTED with the wholesaler attribution', async () => {
+  it('rejectByOwner marks a SENT quote REJECTED with the dealer attribution', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', status: 'SENT', wholesalerId: 'w1', notes: null,
+      id: 'q1', status: 'SENT', dealerId: 'w1', notes: null,
     });
     prisma.quote.update.mockResolvedValue({});
     await svc.rejectByOwner('q1', 'Customer phoned in', false, 'w1');
     const updateArgs = prisma.quote.update.mock.calls[0][0];
     expect(updateArgs.data.status).toBe('REJECTED');
-    expect(updateArgs.data.notes).toMatch(/Wholesaler marked as rejected/);
+    expect(updateArgs.data.notes).toMatch(/Dealer marked as rejected/);
   });
 
   it('rejectByOwner refuses cross-tenant', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', status: 'SENT', wholesalerId: 'w2' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', status: 'SENT', dealerId: 'w2' });
     await expect(svc.rejectByOwner('q1', 'x', false, 'w1')).rejects.toThrow(/Not your quote/);
   });
 
   it('rejectByOwner refuses to reject a non-SENT quote', async () => {
-    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', status: 'APPROVED', wholesalerId: 'w1' });
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', status: 'APPROVED', dealerId: 'w1' });
     await expect(svc.rejectByOwner('q1', 'x', false, 'w1')).rejects.toThrow(/Cannot reject/);
   });
 });
@@ -751,13 +751,13 @@ describe('QuotesService - list() with filters and sort', () => {
 
   function lastCall() { return prisma.quote.findMany.mock.calls[prisma.quote.findMany.mock.calls.length - 1][0]; }
 
-  it('wholesaler users are scoped to their own quotes', async () => {
+  it('dealer users are scoped to their own quotes', async () => {
     await svc.list('wh-1', false);
-    expect(lastCall().where.wholesalerId).toBe('wh-1');
+    expect(lastCall().where.dealerId).toBe('wh-1');
   });
-  it('admins see all quotes (no wholesalerId filter)', async () => {
+  it('admins see all quotes (no dealerId filter)', async () => {
     await svc.list(null, true);
-    expect(lastCall().where.wholesalerId).toBeUndefined();
+    expect(lastCall().where.dealerId).toBeUndefined();
   });
   it('applies a single status filter', async () => {
     await svc.list('wh-1', false, { status: 'SENT' });

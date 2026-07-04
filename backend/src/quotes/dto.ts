@@ -63,7 +63,7 @@ export class UpdateStatusDto {
  * Partial update for a DRAFT quote. The DRAFT is the only state where
  * edits are allowed; once SENT the customer may have already opened
  * the approval link, so we lock the line items. Only fields that the
- * wholesaler should be able to revise post-creation are exposed.
+ * dealer should be able to revise post-creation are exposed.
  */
 export class UpdateQuoteDto {
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MinLength(1) @MaxLength(200) customerName?: string;

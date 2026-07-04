@@ -19,11 +19,11 @@ async function main() {
     console.log('Seeded admin:', adminEmail, '/ admin1234');
   }
 
-  // Demo wholesaler
+  // Demo dealer
   const slug = 'yardex-demo';
-  let wholesaler = await prisma.wholesaler.findUnique({ where: { slug } });
-  if (!wholesaler) {
-    wholesaler = await prisma.wholesaler.create({
+  let dealer = await prisma.dealer.findUnique({ where: { slug } });
+  if (!dealer) {
+    dealer = await prisma.dealer.create({
       data: {
         name: 'Yardex Demo Dealer',
         slug,
@@ -35,13 +35,13 @@ async function main() {
         email: 'owner@yardex.local',
         passwordHash: await bcrypt.hash('owner1234', 10),
         fullName: 'Yardex Owner',
-        role: Role.WHOLESALER_OWNER,
-        wholesalerId: wholesaler.id,
+        role: Role.DEALER_OWNER,
+        dealerId: dealer.id,
       },
     });
     await prisma.quoteTemplate.create({
       data: {
-        wholesalerId: wholesaler.id,
+        dealerId: dealer.id,
         accentColor: '#0ea5e9',
         termsHtml: '<p>50% deposit required to start production. Balance due on delivery. Lead time 7 working days from deposit.</p>',
       },

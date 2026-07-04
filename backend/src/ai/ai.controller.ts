@@ -66,7 +66,7 @@ export class AiController {
   /**
    * Analyse a customer-uploaded photo with the multimodal vision
    * model (default: qwen3.5-397b) and return inferred fence
-   * parameters. The wholesaler uploads an image via multipart/
+   * parameters. The dealer uploads an image via multipart/
    * form-data (field name "file") just like the existing floorplan
    * upload; we persist it to /static/uploads and feed the bytes
    * back to the model as an inline image_url content part.

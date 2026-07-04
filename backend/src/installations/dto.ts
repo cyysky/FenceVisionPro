@@ -34,9 +34,9 @@ export const LINK_PURPOSES = ['STATUS_UPDATE', 'COMPLETION_REVIEW', 'ALL'] as co
 export type LinkPurposeLiteral = typeof LINK_PURPOSES[number];
 
 /**
- * Create an Installation for a given quote. The wholesaler must
+ * Create an Installation for a given quote. The dealer must
  * already own the quote (ownership is checked in the service
- * layer against the caller's wholesalerId).
+ * layer against the caller's dealerId).
  */
 export class CreateInstallationDto {
   @IsString() @MinLength(1) @MaxLength(80) quoteId: string;
@@ -75,7 +75,7 @@ export class TransitionInstallationDto {
 
 /**
  * Filtering for the list endpoint. Mirrors the Quote list DTO
- * (wholesaler + status + search + paging) so the dashboard UI
+ * (dealer + status + search + paging) so the dashboard UI
  * feels consistent.
  */
 export class ListInstallationsQueryDto {

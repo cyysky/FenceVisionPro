@@ -11,7 +11,7 @@ import type {
  * Two axios instances in play:
  *
  *   - `api` (from lib/api) - the regular authed instance. All
- *     wholesaler / installer / customer-link management goes
+ *     dealer / installer / customer-link management goes
  *     through it.
  *   - `publicApi` - a fresh instance with NO Authorization
  *     interceptor, used by the public installer / customer
@@ -23,7 +23,7 @@ import { publicApi } from './api';
 export { publicApi };
 
 // ---------------------------------------------------------------------------
-// Protected (wholesaler) endpoints
+// Protected (dealer) endpoints
 // ---------------------------------------------------------------------------
 
 export interface ListInstallationsParams {
@@ -245,8 +245,8 @@ export async function publicPostCustomerApprove(
 // ---------------------------------------------------------------------------
 
 /**
- * Build the absolute URL the wholesaler pastes into an email /
- * SMS. The wholesaler view is for the installer; the customer
+ * Build the absolute URL the dealer pastes into an email /
+ * SMS. The dealer view is for the installer; the customer
  * view is for the end-customer.
  */
 export function buildPublicInstallerUrl(id: string, token: string): string {

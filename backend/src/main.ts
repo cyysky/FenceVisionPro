@@ -41,7 +41,7 @@ async function bootstrap() {
 
   // Periodic expiry sweep: any SENT quote whose validUntil has
   // passed is auto-marked EXPIRED. This keeps the public approval
-  // link in sync with the wholesaler's validUntil. The interval is
+  // link in sync with the dealer's validUntil. The interval is
   // configurable via QUOTE_EXPIRY_SWEEP_MS (default 5 min) and can
   // be disabled by setting it to 0.
   try {
