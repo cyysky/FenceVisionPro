@@ -1,7 +1,7 @@
 import {
   IsIn, IsISO8601, IsOptional, IsString, MaxLength, MinLength,
 } from 'class-validator';
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 
 const TrimmedNonEmpty = ({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value;
@@ -83,7 +83,6 @@ export class ListInstallationsQueryDto {
   @IsOptional() @IsString() @MaxLength(200) q?: string;
   @IsOptional() @Type(() => Number) limit?: number;
 }
-import { Type } from 'class-transformer';
 
 /**
  * Form fields that ride along with an installation photo upload.
