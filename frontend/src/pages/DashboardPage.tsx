@@ -123,6 +123,7 @@ export default function DashboardPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <QuickLink to="/" label="Quotes" hint="Create and manage quotes" />
             <QuickLink to="/projects" label="Projects" hint="End-customer project workspace" />
+            <QuickLink to="/installations" label="Installations" hint="On-site work, photos & sign-off" />
             <QuickLink to="/products" label="Products" hint="Catalog & pricing" />
             <QuickLink to="/designs" label="Designs" hint="Fence styles & overlays" />
             {user?.role === 'ADMIN' && (

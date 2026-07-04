@@ -46,3 +46,11 @@ export function apiErrorMessage(e: any, fallback = 'Something went wrong'): stri
   if (e?.response?.status === 429) return 'Too many requests - please wait a moment';
   return fallback;
 }
+
+/**
+ * Public axios client for routes that don't carry a JWT (the
+ * installer and customer public-link pages). No auth
+ * interceptor, no token cache - the only "credential" is the
+ * unguessable token in the URL.
+ */
+export const publicApi = axios.create({ baseURL });

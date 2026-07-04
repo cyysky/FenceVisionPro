@@ -15,6 +15,10 @@ import WholesalersPage from './pages/WholesalersPage';
 import ProjectsPage from './pages/ProjectsPage';
 import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
+import InstallationsPage from './pages/InstallationsPage';
+import InstallationDetailPage from './pages/InstallationDetailPage';
+import PublicInstallerView from './pages/PublicInstallerView';
+import PublicCustomerView from './pages/PublicCustomerView';
 
 export default function App() {
   return (
@@ -24,12 +28,19 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/approve/:id" element={<PublicApprovalPage />} />
+
+            {/* Public installation views - NOT wrapped in RequireAuth. */}
+            <Route path="/public/installation/:id/installer/:token" element={<PublicInstallerView />} />
+            <Route path="/public/installation/:id/customer/:linkToken" element={<PublicCustomerView />} />
+
             <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
             <Route path="/quotes/new" element={<RequireAuth><NewQuotePage /></RequireAuth>} />
             <Route path="/quotes/:id" element={<RequireAuth><QuoteDetailPage /></RequireAuth>} />
             <Route path="/projects" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
             <Route path="/projects/new" element={<RequireAuth><NewProjectPage /></RequireAuth>} />
             <Route path="/projects/:id" element={<RequireAuth><ProjectDetailPage /></RequireAuth>} />
+            <Route path="/installations" element={<RequireAuth><InstallationsPage /></RequireAuth>} />
+            <Route path="/installations/:id" element={<RequireAuth><InstallationDetailPage /></RequireAuth>} />
             <Route path="/products" element={<RequireAuth><ProductsPage /></RequireAuth>} />
             <Route path="/designs" element={<RequireAuth><DesignsPage /></RequireAuth>} />
             <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><WholesalersPage /></RequireAuth>} />
