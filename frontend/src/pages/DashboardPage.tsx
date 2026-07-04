@@ -90,34 +90,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-full">
-      <header className="bg-white border-b">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold">F</div>
-            <span className="font-bold">Yardex</span>
-          </div>
-          <nav className="ml-2 sm:ml-8 flex flex-wrap gap-3 sm:gap-4 text-sm">
-            <Link to="/" className="text-slate-900 font-medium">Quotes</Link>
-            <Link to="/projects" className="text-slate-600 hover:text-brand-700">Projects</Link>
-            <Link to="/products" className="text-slate-600 hover:text-brand-700">Products</Link>
-            <Link to="/designs" className="text-slate-600 hover:text-brand-700">Designs</Link>
-            {user?.role === 'ADMIN' && (
-              <Link to="/wholesalers" className="text-slate-600 hover:text-brand-700">Dealers</Link>
-            )}
-          </nav>
-          <div className="ml-auto flex items-center gap-2 text-sm">
-            <Link to="/quotes/new" className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium">
-              + New quote
-            </Link>
-            <span className="hidden sm:inline text-slate-600">{user?.fullName || user?.email}</span>
-            <ChangePasswordButton />
-            <button onClick={logout} className="px-2 py-1 text-xs border rounded">Sign out</button>
-          </div>
-        </div>
-      </header>
-
-      <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4">
+    <div className="space-y-4">
         <section>
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Quick links</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -246,7 +219,6 @@ export default function DashboardPage() {
             )}
           </section>
         )}
-      </main>
     </div>
   );
 }

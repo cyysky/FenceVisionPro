@@ -166,9 +166,11 @@ export interface Installation {
   status: InstallationStatus;
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
+  installerId?: string | null;
   installerName?: string | null;
   installerPhone?: string | null;
   installerEmail?: string | null;
+  installer?: { id: string; name: string; status: 'ACTIVE' | 'INACTIVE' } | null;
   startedAt?: string | null;
   completedAt?: string | null;
   inspectedAt?: string | null;
@@ -187,4 +189,65 @@ export interface Installation {
     projectAddress?: string | null;
     status: string;
   } | null;
+}
+
+// ---------------------------------------------------------------------------
+// Installer directory
+// ---------------------------------------------------------------------------
+
+export type InstallerStatus = 'ACTIVE' | 'INACTIVE';
+
+export interface Installer {
+  id: string;
+  name: string;
+  phone?: string | null;
+  email?: string | null;
+  companyName?: string | null;
+  status: InstallerStatus;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  _count?: { installations: number };
+}
+
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+
+export type InvoiceStatus = 'DRAFT' | 'SENT' | 'PAID' | 'VOID';
+
+/** Allowed next-status map, mirrors backend dto.ts. */
+export const INVOICE_TRANSITIONS: Record<InvoiceStatus, InvoiceStatus[]> = {
+  DRAFT: ['SENT', 'VOID'],
+  SENT:  ['PAID', 'VOID'],
+  PAID:  [],
+  VOID:  [],
+};
+
+export interface InvoiceLineItem {
+  id: string;
+  description: string;
+  quantity: number | string;
+  unitPrice: number | string;
+  total: number | string;
+  position: number;
+}
+
+export interface Invoice {
+  id: string;
+  number: string;
+  status: InvoiceStatus;
+  subtotal: number | string;
+  tax: number | string;
+  total: number | string;
+  issuedAt?: string | null;
+  dueAt?: string | null;
+  paidAt?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lineItems?: InvoiceLineItem[];
+  _count?: { lineItems: number };
+  quote?: { id: string; reference: string; customerName: string; customerEmail?: string | null } | null;
 }

@@ -99,6 +99,28 @@ export default function QuoteDetailPage() {
     finally { setBusy(null); }
   }
 
+  async function createInstallation() {
+    setBusy('inst');
+    try {
+      const { data } = await api.post('/installations', { quoteId: quote.id });
+      toast.success('Installation created');
+      window.location.href = `/installations/${data.id}`;
+    } catch (e: any) {
+      toast.error(apiErrorMessage(e, 'Failed to create installation'));
+    } finally { setBusy(null); }
+  }
+
+  async function createInvoice() {
+    setBusy('inv');
+    try {
+      const { data } = await api.post('/invoices', { quoteId: quote.id });
+      toast.success(`Invoice ${data.number} created`);
+      window.location.href = `/invoices/${data.id}`;
+    } catch (e: any) {
+      toast.error(apiErrorMessage(e, 'Failed to create invoice'));
+    } finally { setBusy(null); }
+  }
+
   async function setStatus(status: 'DRAFT' | 'EXPIRED' | 'SENT') {
     setBusy(status);
     try {
@@ -193,43 +215,57 @@ export default function QuoteDetailPage() {
   const isFinal = quote.status === 'APPROVED' || quote.status === 'REJECTED' || quote.status === 'EXPIRED';
 
   return (
-    <div className="min-h-full bg-slate-50">
-      <header className="bg-white border-b">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-          <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
-          <span className="font-mono text-sm text-slate-500">{quote.reference}</span>
-          <StatusBadge status={quote.status} />
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            {isDraft && (
-              <>
-                <button onClick={() => setStatus('SENT')} disabled={busy !== null}
-                  className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium disabled:opacity-50">
-                  {busy === 'SENT' ? 'Sending…' : '📤 Send to customer'}
-                </button>
-                <button onClick={deleteQuote} className="px-2 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50">Delete draft</button>
-              </>
-            )}
-            {isSent && (
-              <button onClick={ownerReject} disabled={busy !== null}
-                className="px-2 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50 disabled:opacity-50">
-                {busy === 'reject' ? '…' : 'Decline for customer'}
+    <div className="space-y-4 max-w-5xl">
+      <div className="flex flex-wrap items-center gap-2">
+        <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
+        <span className="font-mono text-sm text-slate-500">{quote.reference}</span>
+        <StatusBadge status={quote.status} />
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {isDraft && (
+            <>
+              <button onClick={() => setStatus('SENT')} disabled={busy !== null}
+                className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium disabled:opacity-50">
+                {busy === 'SENT' ? 'Sending…' : '📤 Send to customer'}
               </button>
-            )}
-            {isExpired && (
-              <button onClick={() => setStatus('DRAFT')} disabled={busy !== null}
-                className="px-3 py-1.5 border rounded text-sm hover:bg-slate-50 disabled:opacity-50">
-                Revive as draft
-              </button>
-            )}
-            <button onClick={cloneQuote} disabled={busy !== null}
-              className="px-2 py-1.5 border rounded text-sm hover:bg-slate-50 disabled:opacity-50">
-              {busy === 'clone' ? '…' : 'Clone'}
+              <button onClick={deleteQuote} className="px-2 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50">Delete draft</button>
+            </>
+          )}
+          {isSent && (
+            <button onClick={ownerReject} disabled={busy !== null}
+              className="px-2 py-1.5 border border-red-300 text-red-700 rounded text-sm hover:bg-red-50 disabled:opacity-50">
+              {busy === 'reject' ? '…' : 'Decline for customer'}
             </button>
-          </div>
+          )}
+          {isExpired && (
+            <button onClick={() => setStatus('DRAFT')} disabled={busy !== null}
+              className="px-3 py-1.5 border rounded text-sm hover:bg-slate-50 disabled:opacity-50">
+              Revive as draft
+            </button>
+          )}
+          {quote.status === 'APPROVED' && !quote.installationId && (
+            <button onClick={createInstallation} disabled={busy !== null}
+              className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium disabled:opacity-50">
+              {busy === 'inst' ? '…' : '🏗 Create installation'}
+            </button>
+          )}
+          {quote.status === 'APPROVED' && !quote.invoiceCount && (
+            <button onClick={createInvoice} disabled={busy !== null}
+              className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium disabled:opacity-50">
+              {busy === 'inv' ? '…' : '🧾 Create invoice'}
+            </button>
+          )}
+          {quote.projectId && (
+            <Link to={`/projects/${quote.projectId}`}
+              className="px-3 py-1.5 border border-brand-600 text-brand-700 rounded text-sm hover:bg-brand-50">
+              Open project
+            </Link>
+          )}
+          <button onClick={cloneQuote} disabled={busy !== null}
+            className="px-2 py-1.5 border rounded text-sm hover:bg-slate-50 disabled:opacity-50">
+            {busy === 'clone' ? '…' : 'Clone'}
+          </button>
         </div>
-      </header>
-
-      <main className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4">
+      </div>
         <section className="bg-white border rounded p-4">
           <div className="flex items-start justify-between gap-2 flex-wrap">
             <div>
@@ -369,7 +405,6 @@ export default function QuoteDetailPage() {
             {quote.rejectionReason && <p className="mt-1">Reason: {quote.rejectionReason}</p>}
           </section>
         )}
-      </main>
     </div>
   );
 }

@@ -15,6 +15,7 @@ import type {
   InstallationPhotoKind, InstallationStatus, PublicCustomerLink,
 } from '../lib/types';
 import { INSTALLATION_TRANSITIONS } from '../lib/types';
+import { listInstallers } from '../lib/installers';
 
 /**
  * Installation detail page. Tabbed workspace:
@@ -394,6 +395,23 @@ function LinksTab({ installation, links, onChange }: { installation: Installatio
   const [phone, setPhone] = useState(installation.installerPhone || '');
   const [email, setEmail] = useState(installation.installerEmail || '');
   const [saving, setSaving] = useState(false);
+  const [installers, setInstallers] = useState<{ id: string; name: string; status: string }[] | null>(null);
+  const [assigning, setAssigning] = useState<string>(installation.installerId || '');
+
+  useEffect(() => { (async () => {
+    try { setInstallers(await listInstallers()); } catch { setInstallers([]); }
+  })(); }, []);
+
+  async function assignInstaller() {
+    setSaving(true);
+    try {
+      await updateInstallation(installation.id, { installerId: assigning || '' });
+      toast.success(assigning ? 'Installer assigned' : 'Installer unassigned');
+      onChange();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.message || 'Could not assign installer');
+    } finally { setSaving(false); }
+  }
 
   async function saveContact() {
     setSaving(true);
@@ -434,7 +452,34 @@ function LinksTab({ installation, links, onChange }: { installation: Installatio
   return (
     <div className="space-y-4">
       <section className="bg-white border rounded p-4 space-y-3 text-sm">
-        <h3 className="font-semibold">Installer contact</h3>
+        <div className="flex items-center">
+          <h3 className="font-semibold">Assigned installer</h3>
+          {installation.installer && (
+            <span className="ml-2 px-2 py-0.5 rounded text-xs bg-emerald-100 text-emerald-700">{installation.installer.name}</span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <select className="border rounded px-2 py-1 text-sm min-w-64"
+            value={assigning}
+            onChange={e => setAssigning(e.target.value)}
+            disabled={installers === null}>
+            <option value="">— Unassigned —</option>
+            {(installers || []).filter(i => i.status === 'ACTIVE').map(i => (
+              <option key={i.id} value={i.id}>{i.name}</option>
+            ))}
+          </select>
+          <button onClick={assignInstaller} disabled={saving} className="px-3 py-1.5 bg-brand-600 text-white rounded text-sm disabled:opacity-50">
+            {saving ? 'Saving…' : (assigning ? 'Assign' : 'Unassign')}
+          </button>
+          {installers !== null && installers.length === 0 && (
+            <Link to="/installers" className="text-xs text-brand-700 hover:underline">No installers yet — add one →</Link>
+          )}
+        </div>
+      </section>
+
+      <section className="bg-white border rounded p-4 space-y-3 text-sm">
+        <h3 className="font-semibold">Installer contact (snapshot)</h3>
+        <p className="text-xs text-slate-500">Free-form fields below are a denormalised snapshot from when the link was issued. Edit the directory record to change future defaults.</p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div>
             <label className="block text-xs text-slate-500">Name</label>

@@ -46,6 +46,7 @@ export interface CreateInstallationBody {
   quoteId: string;
   scheduledStart?: string;
   scheduledEnd?: string;
+  installerId?: string;
   installerName?: string;
   installerPhone?: string;
   installerEmail?: string;

@@ -17,8 +17,12 @@ import NewProjectPage from './pages/NewProjectPage';
 import ProjectDetailPage from './pages/ProjectDetailPage';
 import InstallationsPage from './pages/InstallationsPage';
 import InstallationDetailPage from './pages/InstallationDetailPage';
+import InstallersPage from './pages/InstallersPage';
+import InvoicesPage from './pages/InvoicesPage';
+import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import PublicInstallerView from './pages/PublicInstallerView';
 import PublicCustomerView from './pages/PublicCustomerView';
+import { Layout } from './components/Layout';
 
 export default function App() {
   return (
@@ -33,17 +37,20 @@ export default function App() {
             <Route path="/public/installation/:id/installer/:token" element={<PublicInstallerView />} />
             <Route path="/public/installation/:id/customer/:linkToken" element={<PublicCustomerView />} />
 
-            <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
-            <Route path="/quotes/new" element={<RequireAuth><NewQuotePage /></RequireAuth>} />
-            <Route path="/quotes/:id" element={<RequireAuth><QuoteDetailPage /></RequireAuth>} />
-            <Route path="/projects" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
-            <Route path="/projects/new" element={<RequireAuth><NewProjectPage /></RequireAuth>} />
-            <Route path="/projects/:id" element={<RequireAuth><ProjectDetailPage /></RequireAuth>} />
-            <Route path="/installations" element={<RequireAuth><InstallationsPage /></RequireAuth>} />
-            <Route path="/installations/:id" element={<RequireAuth><InstallationDetailPage /></RequireAuth>} />
-            <Route path="/products" element={<RequireAuth><ProductsPage /></RequireAuth>} />
-            <Route path="/designs" element={<RequireAuth><DesignsPage /></RequireAuth>} />
-            <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><DealersPage /></RequireAuth>} />
+            <Route path="/" element={<RequireAuth><Layout><DashboardPage /></Layout></RequireAuth>} />
+            <Route path="/quotes/new" element={<RequireAuth><Layout><NewQuotePage /></Layout></RequireAuth>} />
+            <Route path="/quotes/:id" element={<RequireAuth><Layout><QuoteDetailPage /></Layout></RequireAuth>} />
+            <Route path="/projects" element={<RequireAuth><Layout><ProjectsPage /></Layout></RequireAuth>} />
+            <Route path="/projects/new" element={<RequireAuth><Layout><NewProjectPage /></Layout></RequireAuth>} />
+            <Route path="/projects/:id" element={<RequireAuth><Layout><ProjectDetailPage /></Layout></RequireAuth>} />
+            <Route path="/installations" element={<RequireAuth><Layout><InstallationsPage /></Layout></RequireAuth>} />
+            <Route path="/installations/:id" element={<RequireAuth><Layout><InstallationDetailPage /></Layout></RequireAuth>} />
+            <Route path="/installers" element={<RequireAuth><Layout><InstallersPage /></Layout></RequireAuth>} />
+            <Route path="/invoices" element={<RequireAuth><Layout><InvoicesPage /></Layout></RequireAuth>} />
+            <Route path="/invoices/:id" element={<RequireAuth><Layout><InvoiceDetailPage /></Layout></RequireAuth>} />
+            <Route path="/products" element={<RequireAuth><Layout><ProductsPage /></Layout></RequireAuth>} />
+            <Route path="/designs" element={<RequireAuth><Layout><DesignsPage /></Layout></RequireAuth>} />
+            <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><Layout><DealersPage /></Layout></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
           <ConfirmDialog />
