@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api, apiErrorMessage } from '../lib/api';
 import { AiControls } from '../components/AiControls';
+import { ThreeJsViewer } from '../components/ThreeJsViewer';
 import { useToast } from '../components/ui/Toast';
 import { confirm } from '../components/ui/Confirm';
 import { Skeleton, SkeletonRows } from '../components/ui/Skeleton';
@@ -18,6 +19,10 @@ export default function QuoteDetailPage() {
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [validUntilDate, setValidUntilDate] = useState<string>('');
+  // Modal: open the persisted three.js scene in its own dialog
+  // so the dealer can re-visit the 3D preview after navigating
+  // away from the AI controls section. Loaded from quote.threeJsCode.
+  const [show3D, setShow3D] = useState(false);
 
   useEffect(() => { (async () => {
     setLoading(true);
@@ -376,7 +381,18 @@ export default function QuoteDetailPage() {
         )}
 
         <section className="bg-white border rounded p-4">
-          <h2 className="font-semibold mb-2">AI visualisation</h2>
+          <div className="flex items-start justify-between gap-2 flex-wrap mb-2">
+            <h2 className="font-semibold">AI visualisation</h2>
+            {quote.threeJsCode && (
+              <button
+                onClick={() => setShow3D(true)}
+                className="px-3 py-1.5 border border-brand-600 text-brand-700 rounded text-xs font-medium hover:bg-brand-50"
+                title="Open the saved 3D scene in a modal viewer"
+              >
+                🎮 View 3D scene
+              </button>
+            )}
+          </div>
           <p className="text-xs text-slate-500 mb-3">
             Regenerate a photorealistic image or a 3D scene. Both are saved to this quote automatically.
           </p>
@@ -504,6 +520,32 @@ export default function QuoteDetailPage() {
             <h2 className="font-semibold">Quote declined</h2>
             {quote.rejectionReason && <p className="mt-1">Reason: {quote.rejectionReason}</p>}
           </section>
+        )}
+
+        {show3D && quote.threeJsCode && (
+          <div
+            className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4"
+            onClick={() => setShow3D(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="3D fence preview"
+          >
+            <div
+              className="bg-white rounded shadow-xl w-full max-w-4xl overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between gap-2 px-4 py-2 border-b">
+                <div className="font-semibold text-sm">3D fence preview</div>
+                <button
+                  onClick={() => setShow3D(false)}
+                  className="px-2 py-1 border rounded text-xs hover:bg-slate-50"
+                >Close ✕</button>
+              </div>
+              <div className="p-2">
+                <ThreeJsViewer code={quote.threeJsCode} height={520} />
+              </div>
+            </div>
+          </div>
         )}
     </div>
   );

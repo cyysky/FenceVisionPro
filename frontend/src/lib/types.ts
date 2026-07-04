@@ -56,6 +56,13 @@ export interface ProjectVisualization {
   widthPx?: number | null;
   heightPx?: number | null;
   generatedAt: string;
+  /**
+   * Raw three.js source for AI_3D_SNAPSHOT entries. NULL for
+   * AI_IMAGE and TOPDOWN_COMPOSITE entries. Lets the dealer
+   * re-open the exact scene that produced the snapshot
+   * (drag/zoom from a different angle, save another render).
+   */
+  sourceCode?: string | null;
 }
 
 export interface Project {

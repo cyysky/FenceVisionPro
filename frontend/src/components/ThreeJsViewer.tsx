@@ -74,17 +74,62 @@ window.addEventListener('error', function(e){
   el.textContent = (e.error && e.error.stack) || e.message;
   el.style.display = 'block';
 });
+// Snapshot path: requires the handshake token (echoes canvas
+// bytes back to the parent).
 window.addEventListener('message', function(e) {
   var m = e.data;
-  if (!m || m.type !== 'snapshot' || m.token !== ${JSON.stringify(handshake)}) return;
-  try {
-    var cv = document.querySelector('canvas');
-    if (!cv) { parent.postMessage({type:'snapshot-error', token: m.token, message:'no canvas'}, '*'); return; }
-    parent.postMessage({type:'snapshot', token: m.token, dataUrl: cv.toDataURL('image/png')}, '*');
-  } catch (err) {
-    parent.postMessage({type:'snapshot-error', token: m.token, message: String(err && err.message || err)}, '*');
+  if (!m) return;
+  if (m.type === 'snapshot' && m.token === ${JSON.stringify(handshake)}) {
+    try {
+      var cv = document.querySelector('canvas');
+      if (!cv) { parent.postMessage({type:'snapshot-error', token: m.token, message:'no canvas'}, '*'); return; }
+      parent.postMessage({type:'snapshot', token: m.token, dataUrl: cv.toDataURL('image/png')}, '*');
+    } catch (err) {
+      parent.postMessage({type:'snapshot-error', token: m.token, message: String(err && err.message || err)}, '*');
+    }
+    return;
+  }
+  // Viewer control commands (no handshake needed: they only
+  // mutate local camera state, they don't exfiltrate data).
+  if (m.type === 'reset-view' || m.type === 'reset-zoom' || m.type === 'toggle-orbit') {
+    try { applyViewerCommand(m.type); } catch (err) { /* ignore */ }
+    return;
   }
 });
+
+/**
+ * Apply a viewer-control command to the scene's camera/controls.
+ * Reads the hoisted window.camera / window.controls set up by
+ * the auto-attach IIFE further down. We store the initial
+ * camera position the first time the user invokes 'reset-view'
+ * so reset always returns to the model's intended framing.
+ */
+var __initialCamPos = null;
+var __initialTarget = null;
+// Mirrored on window so the render-loop IIFE can read it.
+window.__fvpAutoOrbit = window.__fvpAutoOrbit || false;
+function applyViewerCommand(cmd) {
+  var cam = window.camera, c = window.__fvpControls;
+  if (cmd === 'reset-view' || cmd === 'reset-zoom') {
+    if (!cam) return;
+    if (!__initialCamPos) {
+      __initialCamPos = cam.position.clone();
+    }
+    if (!__initialTarget && c && c.target) {
+      __initialTarget = c.target.clone();
+    }
+    if (cmd === 'reset-view' && __initialTarget && c) {
+      c.target.copy(__initialTarget);
+    }
+    cam.position.copy(__initialCamPos);
+    cam.lookAt(c && c.target ? c.target : new window.THREE.Vector3(0, 0, 0));
+    if (c) { c.update(); }
+    return;
+  }
+  if (cmd === 'toggle-orbit') {
+    window.__fvpAutoOrbit = !window.__fvpAutoOrbit;
+  }
+}
 try {
 ${hoisted}
 } catch (e) {
@@ -130,7 +175,25 @@ ${hoisted}
       c.update();
       window.__fvpControls = c;
       if (!window.__fvpHasAnimate) {
-        var tick = function() { c.update(); requestAnimationFrame(tick); };
+        // Our own render loop. We drive controls.update() and,
+        // if the dealer has toggled auto-orbit, rotate the
+        // camera around the controls.target so the scene
+        // demonstrates itself.
+        var cam = window.camera;
+        var tick = function() {
+          if (window.__fvpAutoOrbit && cam && c) {
+            var t = c.target;
+            var dx = cam.position.x - t.x;
+            var dz = cam.position.z - t.z;
+            var r = Math.sqrt(dx * dx + dz * dz);
+            var a = Math.atan2(dz, dx) + 0.005;
+            cam.position.x = t.x + Math.cos(a) * r;
+            cam.position.z = t.z + Math.sin(a) * r;
+            cam.lookAt(t);
+          }
+          c.update();
+          requestAnimationFrame(tick);
+        };
         requestAnimationFrame(tick);
       }
       return true;
@@ -147,6 +210,16 @@ ${hoisted}
 </script>
 </body></html>`;
 }
+
+/**
+ * Send a control command to the sandboxed iframe. The iframe's
+ * message handler picks it up and applies it (reset camera,
+ * re-centre on the scene, etc.). The handshake is the same
+ * token the iframe's buildHtml() baked in - we use it so the
+ * iframe only honours commands from this viewer instance, not
+ * from random postMessage on the page.
+ */
+
 
 function genHandshake(): string {
   const a = new Uint8Array(16);
@@ -203,6 +276,20 @@ export function ThreeJsViewer({ code, height = 480, onSnapshot }: Props) {
     setTimeout(() => setSnapshotting(false), 8000);
   }
 
+  /**
+   * Send a control command to the sandboxed iframe. The
+   * iframe's message handler picks it up and applies it
+   * (reset camera, re-centre on the scene, etc.). The
+   * snapshot path is the one that needs the handshake token
+   * (it returns bytes to the parent); these UI controls are
+   * convenience commands and do not echo anything back.
+   */
+  function postViewerCommand(cmd: { type: 'reset-view' | 'reset-zoom' | 'toggle-orbit' }) {
+    const w = ref.current?.contentWindow as any;
+    if (!w) return;
+    w.postMessage(cmd, '*');
+  }
+
   return (
     <div className="border rounded overflow-hidden bg-slate-900" style={{ height }}>
       {error && <div className="p-3 text-sm text-red-700 bg-red-50">{error}</div>}
@@ -221,6 +308,21 @@ export function ThreeJsViewer({ code, height = 480, onSnapshot }: Props) {
                   {snapshotting ? 'Capturing…' : '📷 Save as render'}
                 </button>
               )}
+              <button
+                onClick={() => postViewerCommand({ type: 'reset-view' })}
+                className="px-2 py-0.5 rounded border border-slate-600 hover:bg-slate-700"
+                title="Re-centre the camera on the scene"
+              >⌖ reset view</button>
+              <button
+                onClick={() => postViewerCommand({ type: 'reset-zoom' })}
+                className="px-2 py-0.5 rounded border border-slate-600 hover:bg-slate-700"
+                title="Reset the zoom level to the default"
+              >🔍 reset zoom</button>
+              <button
+                onClick={() => postViewerCommand({ type: 'toggle-orbit' })}
+                className="px-2 py-0.5 rounded border border-slate-600 hover:bg-slate-700"
+                title="Toggle automatic camera rotation around the scene"
+              >↺ auto-orbit</button>
               <button
                 onClick={() => {
                   const w = (ref.current?.contentWindow as any);

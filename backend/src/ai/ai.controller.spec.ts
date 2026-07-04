@@ -100,3 +100,57 @@ describe('AiController - render-image quote persistence', () => {
       .rejects.toThrow(/disabled/i);
   });
 });
+
+describe('AiController - generate-3d quote persistence (Step 3)', () => {
+  let ctrl: AiController;
+  let ai: any;
+  let prisma: any;
+
+  beforeEach(async () => {
+    ai = {
+      enabled: true,
+      generateThreeJsScene: jest.fn().mockResolvedValue({ code: 'function init(){ /* three */ }', model: 'mimo-v25-pro' }),
+    };
+    prisma = {
+      quote: { findUnique: jest.fn(), update: jest.fn() },
+    };
+    const mod = await Test.createTestingModule({
+      controllers: [AiController],
+      providers: [
+        { provide: AiService, useValue: ai },
+        { provide: PrismaService, useValue: prisma },
+        { provide: require('../storage/storage.service').StorageService, useValue: { saveBuffer: () => {} } },
+      ],
+    }).compile();
+    ctrl = mod.get(AiController);
+  });
+
+  it('returns the code without persisting when no quoteId is set', async () => {
+    const out = await ctrl.generate3d({ style: 'Privacy', color: 'Black', heightFt: 6 } as any);
+    expect(out).toEqual({ code: 'function init(){ /* three */ }', model: 'mimo-v25-pro' });
+    expect(prisma.quote.update).not.toHaveBeenCalled();
+  });
+
+  it('persists the code onto quote.threeJsCode when quoteId is set', async () => {
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1' });
+    prisma.quote.update.mockResolvedValue({ id: 'q1', threeJsCode: 'function init(){ /* three */ }' });
+    const out = await ctrl.generate3d({ style: 'Privacy', color: 'Black', heightFt: 6, quoteId: 'q1' } as any);
+    expect(prisma.quote.update).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      data: { threeJsCode: 'function init(){ /* three */ }' },
+    });
+    expect(out.code).toBe('function init(){ /* three */ }');
+  });
+
+  it('refuses to persist when the quoteId is unknown', async () => {
+    prisma.quote.findUnique.mockResolvedValue(null);
+    await expect(ctrl.generate3d({ style: 'Privacy', color: 'Black', heightFt: 6, quoteId: 'q1' } as any))
+      .rejects.toThrow(/not found/i);
+  });
+
+  it('refuses to run when AI is disabled', async () => {
+    (ctrl as any).ai.enabled = false;
+    await expect(ctrl.generate3d({ style: 'Privacy', color: 'Black', heightFt: 6 } as any))
+      .rejects.toThrow(/disabled/i);
+  });
+});

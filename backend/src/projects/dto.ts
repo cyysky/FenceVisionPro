@@ -102,6 +102,15 @@ export class GenerateVisualizationDto {
   @IsNumber() @Min(0.5) @Max(20) heightFt: number;
   @IsOptional() @IsInt() @Min(0) @Max(10000) panelCount?: number;
   @IsOptional() @IsInt() @Min(0) @Max(10000) gateCount?: number;
+  /**
+   * Optional raw three.js source. When the dealer has a
+   * previously-generated AI_3D_SNAPSHOT for this style, they
+   * can re-submit its source to attach it to a new
+   * visualization row (so the gallery retains the source even
+   * if the live iframe was closed). Capped at 200k chars
+   * to mirror the Quote.threeJsCode cap.
+   */
+  @IsOptional() @IsString() @MaxLength(200_000) sourceCode?: string;
 }
 
 export class PromoteToQuoteDto {

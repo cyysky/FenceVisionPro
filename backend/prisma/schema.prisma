@@ -347,6 +347,12 @@ model ProjectVisualization {
   modelUsed   String?
   widthPx     Int?
   heightPx    Int?
+  // The raw three.js source for AI_3D_SNAPSHOT entries. Stored
+  // so the dealer can re-open the exact scene that produced
+  // this snapshot (drag/zoom from a different angle, etc.) -
+  // otherwise only the static image survives a refresh. NULL
+  // for AI_IMAGE and TOPDOWN_COMPOSITE entries.
+  sourceCode  String?                  @db.Text
   generatedAt DateTime                 @default(now())
 
   @@index([projectId, kind])

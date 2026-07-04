@@ -13,6 +13,7 @@ import { useToast } from '../components/ui/Toast';
 import { confirm } from '../components/ui/Confirm';
 import { Skeleton, SkeletonRows } from '../components/ui/Skeleton';
 import { Tabs, Tab } from '../components/ui/Tabs';
+import { ThreeJsViewer } from '../components/ThreeJsViewer';
 import type {
   Project, ProjectDocument, ProjectFenceSelection, ProjectMeasurement,
   ProjectVisualization, ProjectStatus,
@@ -797,6 +798,7 @@ function VisualisationsTab({ projectId, visualizations, onChange }: {
   const [heightFt, setHeightFt] = useState(6);
   const [busy, setBusy] = useState<string | null>(null);
   const [viewing, setViewing] = useState<ProjectVisualization | null>(null);
+  const [viewing3D, setViewing3D] = useState<ProjectVisualization | null>(null);
 
   async function generate(kind: 'AI_IMAGE' | 'AI_3D_SNAPSHOT') {
     setBusy(kind);
@@ -841,17 +843,39 @@ function VisualisationsTab({ projectId, visualizations, onChange }: {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           {visualizations.map(v => (
-            <VisTile key={v.id} projectId={projectId} vis={v} onView={() => setViewing(v)} onDelete={() => onDelete(v)} />
+            <VisTile key={v.id} projectId={projectId} vis={v}
+              onView={() => setViewing(v)}
+              onView3D={() => setViewing3D(v)}
+              onDelete={() => onDelete(v)} />
           ))}
         </div>
       )}
 
       {viewing && <VisPreviewModal projectId={projectId} vis={viewing} onClose={() => setViewing(null)} />}
+      {viewing3D && viewing3D.sourceCode && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 grid place-items-center p-4"
+          onClick={() => setViewing3D(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-label="3D visualisation"
+        >
+          <div className="bg-white rounded shadow-xl w-full max-w-4xl overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-2 px-4 py-2 border-b">
+              <div className="font-semibold text-sm">3D visualisation — {new Date(viewing3D.generatedAt).toLocaleString()}</div>
+              <button onClick={() => setViewing3D(null)} className="px-2 py-1 border rounded text-xs hover:bg-slate-50">Close ✕</button>
+            </div>
+            <div className="p-2">
+              <ThreeJsViewer code={viewing3D.sourceCode} height={520} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function VisTile({ projectId, vis, onView, onDelete }: { projectId: string; vis: ProjectVisualization; onView: () => void; onDelete: () => void }) {
+function VisTile({ projectId, vis, onView, onView3D, onDelete }: { projectId: string; vis: ProjectVisualization; onView: () => void; onView3D: () => void; onDelete: () => void }) {
   const [thumb, setThumb] = useState<string | null>(null);
   useEffect(() => {
     if (vis.kind !== 'AI_IMAGE') return;
@@ -880,7 +904,14 @@ function VisTile({ projectId, vis, onView, onDelete }: { projectId: string; vis:
         <div className="text-slate-500">{new Date(vis.generatedAt).toLocaleString()}</div>
         {vis.modelUsed && <div className="text-slate-400 text-[10px]">model: {vis.modelUsed}</div>}
       </div>
-      <div className="p-1 border-t flex justify-end">
+      <div className="p-1 border-t flex justify-end gap-1">
+        {vis.kind === 'AI_3D_SNAPSHOT' && vis.sourceCode && (
+          <button
+            onClick={onView3D}
+            className="text-xs text-brand-700 hover:underline px-1"
+            title="Open the saved three.js source in the sandboxed 3D viewer"
+          >🎮 View 3D</button>
+        )}
         <button onClick={onDelete} className="text-xs text-red-600 hover:underline px-1">Delete</button>
       </div>
     </div>

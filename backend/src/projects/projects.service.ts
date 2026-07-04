@@ -271,6 +271,9 @@ export class ProjectsService {
       id: true, projectId: true, kind: true,
       mimeType: true, prompt: true, modelUsed: true,
       widthPx: true, heightPx: true, generatedAt: true,
+      // Source for AI_3D_SNAPSHOT entries (raw three.js). NULL
+      // for AI_IMAGE / TOPDOWN_COMPOSITE.
+      sourceCode: true,
     } as const;
   }
 
@@ -469,6 +472,7 @@ export class ProjectsService {
     kind: 'AI_IMAGE' | 'AI_3D_SNAPSHOT';
     style: string; color: string; heightFt: number;
     panelCount?: number; gateCount?: number;
+    sourceCode?: string;  // optional pre-generated three.js source
   }) {
     const project = await this.assertOwnership(projectId, user);
 
@@ -509,21 +513,29 @@ export class ProjectsService {
     // blob. We don't have a headless renderer in v1, so the source
     // is the value - the frontend runs it inside a sandboxed iframe.
     //
+    // The caller can also submit a pre-existing source via
+    // dto.sourceCode (e.g. when the dealer re-saves a scene they
+    // previously generated). When that's present we use it
+    // directly and skip the upstream call to save tokens.
+    //
     // TODO: render three.js scene via puppeteer/playwright when
     // available, and persist the rendered PNG (mimeType image/png)
     // in addition to (or instead of) the source.
-    const { code, model } = await this.ai.generateThreeJsScene({
-      style: dto.style, color: dto.color, heightFt: dto.heightFt,
-      panelCount: dto.panelCount, gateCount: dto.gateCount,
-    });
+    const code = dto.sourceCode
+      ? { code: dto.sourceCode, model: 'client-supplied' as string }
+      : await this.ai.generateThreeJsScene({
+          style: dto.style, color: dto.color, heightFt: dto.heightFt,
+          panelCount: dto.panelCount, gateCount: dto.gateCount,
+        });
     return this.prisma.projectVisualization.create({
       data: {
         projectId: project.id,
         kind: 'AI_3D_SNAPSHOT' as any,
         mimeType: 'application/javascript',
-        data: Buffer.from(code, 'utf8'),
-        prompt: code.slice(0, 200),
-        modelUsed: model,
+        data: Buffer.from(code.code, 'utf8'),
+        sourceCode: code.code,
+        prompt: code.code.slice(0, 200),
+        modelUsed: code.model,
         widthPx: null,
         heightPx: null,
       },

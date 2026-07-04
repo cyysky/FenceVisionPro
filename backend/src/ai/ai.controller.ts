@@ -100,11 +100,25 @@ export class AiController {
    * Generate a three.js scene as raw JS source. The frontend renders
    * it inside a sandboxed iframe so the LLM-generated code cannot
    * touch the host app.
+   *
+   * If `quoteId` is provided, the generated source is also persisted
+   * onto `quote.threeJsCode` so it survives a page refresh and can
+   * be re-opened from a saved quote. The source is also returned in
+   * the response (as before).
    */
   @Post('generate-3d')
-  async generate3d(@Body() dto: FenceParamsDto) {
+  async generate3d(@Body() dto: FenceParamsDto & { quoteId?: string }) {
     if (!this.ai.enabled) throw new BadRequestException('AI is disabled');
-    return this.ai.generateThreeJsScene(dto);
+    const out = await this.ai.generateThreeJsScene(dto);
+    if (dto.quoteId) {
+      const exists = await this.prisma.quote.findUnique({ where: { id: dto.quoteId }, select: { id: true } });
+      if (!exists) throw new BadRequestException('quoteId not found');
+      await this.prisma.quote.update({
+        where: { id: dto.quoteId },
+        data: { threeJsCode: out.code },
+      });
+    }
+    return out;
   }
 
   /**
