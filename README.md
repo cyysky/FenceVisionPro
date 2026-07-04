@@ -1,12 +1,33 @@
-# FenceVisionPro
+# Yardex — Fence Wholesaler Operations Platform
 
-B2B2C platform that lets your US wholesalers produce accurate, visually-rendered fence quotations in minutes instead of weeks.
+**Design To Inspire, Engineered to Endure.**
+
+B2B2C platform that lets fence dealers produce accurate, visually-rendered fence quotations in minutes instead of weeks.
+
+## Privacy
+
+Yardex does not store personal contact information of company directors in
+application code, seeds, or test fixtures. Each dealer's contact info is
+entered by the dealer themselves.
+
+In practice this means:
+
+- The seed script creates a demo dealer record with `contactPhone = null`.
+- The `Installer` model has optional `phone` / `email` columns that are
+  never populated by the seed or by any defaulting logic - the dealer
+  types their own contractor's details in.
+- The PDF generator and public approval pages never echo a company
+  phone number from any hard-coded constant.
+
+If a future feature genuinely needs a "primary contact phone" for a
+company, it must read from a per-tenant `Dealer.phone` field, which the
+dealer fills in for themselves - never from a hard-coded company default.
 
 ## Goals
 - Reduce quote-to-order cycle from 2–3 weeks to **7 working days**.
-- Wholesalers log in to upload a house layout, draw the fence on it, pick a design, and instantly get a rendered preview and itemised quotation.
+- Dealers log in to upload a house layout, draw the fence on it, pick a design, and instantly get a rendered preview and itemised quotation.
 - Customer receives a public approval link with a quote and an e-signature field.
-- All product data, pricing, and templates are managed centrally with per-wholesaler overrides.
+- All product data, pricing, and templates are managed centrally with per-dealer overrides.
 
 ## Stack
 - **Frontend**: Vite + React + TypeScript + Tailwind, served by nginx in production
@@ -39,7 +60,7 @@ DATABASE_URL=postgresql://fence:fence@localhost:5432/fencevisionpro npx prisma d
 cd ..
 
 # 3. Open
-#    App:  http://localhost:12889
+#    App:  http://localhost:12890
 #    API:  http://localhost:12888
 ```
 
@@ -48,35 +69,55 @@ cd ..
 > Postgres port `5432` exposed by docker compose on the host loopback.
 
 Seeded logins:
-- **Admin** (you): `admin@fencevisionpro.local` / `admin1234`
-- **Wholesaler owner**: `owner@demofence.example` / `owner1234`
+- **Admin** (you): `admin@yardex.local` / `admin1234`
+- **Dealer owner**: `owner@yardex.local` / `owner1234`
 
 ## Core flows
 
-### Wholesaler onboarding
-1. Admin logs in, goes to **Wholesalers**, creates a new tenant.
+### Dealer onboarding
+1. Admin logs in, goes to **Dealers**, onboards a new dealer.
 2. Owner receives login + password, signs in to start creating quotes.
 
 ### Quote lifecycle
-1. Wholesaler creates a new quote.
+1. Dealer creates a new quote.
 2. Uploads a floor plan and **calibrates** the scale (click two reference points, enter real distance).
 3. **Draws** fence segments on the plan – the total length is computed live.
 4. Picks a design + primary product, and uploads a house photo for the **client-side preview**. The server also composites a top-down render via the `/render` endpoint.
 5. Hits **Save & send** – the system derives line items, computes totals, and emits a public approval link.
 6. Customer opens the link, reviews the render + line items, signs, and approves.
-7. Wholesaler generates the PDF and ships the order.
+7. Dealer generates the PDF and ships the order.
+
+### Projects
+End customers (homeowners) can submit a project (photos, measurements,
+property address) that the dealer reviews and turns into a quote. The
+Project workspace has tabs for documents, fence selections, measurements
+and AI visualisations.
+
+### Installations
+Once a quote is APPROVED, the dealer schedules an Installation. The
+installer is assigned from the dealer-owned Installer directory (name,
+phone, email all entered by the dealer — see the Privacy section).
+The dealer can issue a public customer link so the homeowner can see
+the live timeline + photo gallery + sign off on completion.
+
+### Invoices
+From an APPROVED quote the dealer can generate a DRAFT invoice
+(`INV-<year>-<NNNN>` per dealer, line items copied from the quote).
+Drafts are editable; once sent, the invoice is part of the audit
+trail and moves through SENT → PAID | VOID via the transition
+endpoint.
 
 ## API surface (selected)
 | Method | Path | Description |
 |---|---|---|
 | `POST` | `/auth/login` | Email + password → JWT |
 | `GET`  | `/auth/me` | Current user |
-| `GET`  | `/wholesalers` | Admin only |
-| `POST` | `/wholesalers` | Admin only – onboard a new wholesaler |
-| `POST` | `/wholesalers/:id/staff` | Owner adds a staff sub-user |
+| `GET`  | `/wholesalers` | Admin only (path kept for backward compat) |
+| `POST` | `/wholesalers` | Admin only – onboard a new dealer |
+| `POST` | `/wholesalers/:id/staff` | Owner adds a staff sub-user (path kept for backward compat) |
 | `GET`  | `/products` | Catalog with effective price for current tenant |
 | `POST` | `/products` | Admin – add a product |
-| `POST` | `/products/:id/override/:wholesalerId` | Admin – set a per-wholesaler price |
+| `POST` | `/products/:id/override/:wholesalerId` | Admin – set a per-dealer price |
 | `GET`  | `/designs` | Design library |
 | `POST` | `/quotes/upload-floorplan` | Multipart upload of a plan/photo |
 | `POST` | `/render` | Server-side composite (top-down) |
@@ -95,10 +136,22 @@ Seeded logins:
 | `POST` | `/quotes/:id/clone` | Clone any quote as a new DRAFT |
 | `POST` | `/quotes/:id/snapshot` | Persist a client-captured 3D frame as the quote's render |
 | `POST` | `/quotes/expire-overdue` | Mark all SENT quotes with past `validUntil` as `EXPIRED` (idempotent, also runs every 5 min) |
-| `DELETE` | `/products/:id/override/:wholesalerId` | Admin – clear a per-wholesaler price override |
+| `DELETE` | `/products/:id/override/:wholesalerId` | Admin – clear a per-dealer price override |
 | `POST` | `/ai/render-image` | Photorealistic fence image (server-side) |
 | `POST` | `/ai/generate-3d` | Self-contained three.js scene (LLM-generated) |
 | `GET` | `/ai/status` | Is AI enabled? Which models? |
+| `GET`  | `/installers` | List installers for the current dealer (admin sees all) |
+| `GET`  | `/installers/:id` | Fetch a single installer |
+| `POST` | `/installers` | Create an installer (dealerId optional for admin) |
+| `PATCH`| `/installers/:id` | Update an installer |
+| `DELETE`| `/installers/:id` | Soft-delete (status → INACTIVE) |
+| `GET`  | `/invoices` | List invoices (filter by status / quoteId) |
+| `GET`  | `/invoices/:id` | Fetch a single invoice (with line items) |
+| `POST` | `/invoices` | Create a DRAFT invoice from an APPROVED quote |
+| `PATCH`| `/invoices/:id` | Edit DRAFT notes / dueAt |
+| `POST` | `/invoices/:id/transition` | State machine: DRAFT→SENT→PAID\|VOID |
+| `DELETE`| `/invoices/:id` | Delete a DRAFT invoice |
+| `POST` | `/installations` | Create an installation (now accepts `installerId`) |
 
 ## AI features
 
@@ -125,7 +178,7 @@ power two extra visualisation features. The credentials live in
 ### Where the AI shows up in the UI
 
 - **NewQuotePage** - "Design preview" section gains two buttons: "✨ AI render image" and "🧊 Generate 3D scene". The AI image is automatically used as the quote's preview when the user saves.
-- **QuoteDetailPage** - "AI visualisation" section lets the wholesaler re-run the AI at any time to get a fresh render for the customer.
+- **QuoteDetailPage** - "AI visualisation" section lets the dealer re-run the AI at any time to get a fresh render for the customer.
 
 ### Security
 
@@ -159,8 +212,8 @@ curl -fsSL https://get.docker.com | sh
 sudo usermod -aG docker $USER   # log out and back in
 
 # Clone the repo
-git clone <your-git-url> fencevisionpro
-cd fencevisionpro
+git clone <your-git-url> yardex
+cd yardex
 
 # Create the real env file
 cp backend/.env.example backend/.env
@@ -208,11 +261,11 @@ The simplest path is **Caddy** as a reverse proxy - automatic Let's Encrypt
 certificates, zero config. Add a `Caddyfile` to the repo:
 
 ```caddyfile
-app.fencevisionpro.com {
+app.yardex.com.my {
     reverse_proxy localhost:12889
 }
 
-api.fencevisionpro.com {
+api.yardex.com.my {
     reverse_proxy localhost:12888
 }
 ```
@@ -226,7 +279,7 @@ sudo systemctl reload caddy
 ```
 
 Point your DNS A records at the server and Caddy will fetch certs
-automatically. Open `https://app.fencevisionpro.com` in a browser.
+automatically. Open `https://app.yardex.com.my` in a browser.
 
 If you'd rather stay on the compose-managed ports, change the host-side
 port mapping in `docker-compose.yml` to `80:80` and `443:3000` and run
@@ -238,14 +291,14 @@ Two things need to be backed up:
 
 ```bash
 # Postgres database
-docker exec fvp_db pg_dump -U fence fencevisionpro | gzip > backup-$(date +%F).sql.gz
+docker exec yardex_db pg_dump -U fence fencevisionpro | gzip > backup-$(date +%F).sql.gz
 
 # Uploaded plans / generated renders / PDFs / signatures
 tar -czf data-$(date +%F).tar.gz data/uploads data/renders data/pdfs data/signatures
 ```
 
 Schedule both with `cron` (daily is plenty for a v1). Restore with
-`docker exec -i fvp_db psql -U fence fencevisionpro < backup.sql.gz` and
+`docker exec -i yardex_db psql -U fence fencevisionpro < backup.sql.gz` and
 unpacking the tarball.
 
 ### 5. Updating
@@ -268,7 +321,7 @@ is plenty for the v1 workload). Tested concepts:
 - **AWS Lightsail** ($5/mo) - if you're already in AWS
 - **Vultr**, **Linode** - similar tier
 
-Pick a region close to your US wholesalers for the lowest latency
+Pick a region close to your dealers for the lowest latency
 (Ashburn, NY or SFO are good choices).
 
 ## Architectural seams (where to extend later)
@@ -308,18 +361,18 @@ npm run dev
 The Vite dev server proxies `/api` and `/static` to `http://localhost:12888`.
 
 ## Data model (summary)
-- `Wholesaler` (tenant)
-- `User` (ADMIN, WHOLESALER_OWNER, WHOLESALER_STAFF) – staff are scoped to a wholesaler
-- `Product` – global catalog with optional `PriceOverride` per wholesaler
+- `Dealer` (tenant)
+- `User` (ADMIN, WHOLESALER_OWNER, WHOLESALER_STAFF) – staff are scoped to a dealer
+- `Product` – global catalog with optional `PriceOverride` per dealer
 - `Design` – name, style, overlay URL, config; linked to `Product`s via `DesignProduct` (coverage in meters)
-- `QuoteTemplate` – per-wholesaler header/footer/terms
+- `QuoteTemplate` – per-dealer header/footer/terms
 - `Quote` – customer info, fence segments (in meters), selected design, totals, status
 - `QuoteLineItem` – derived from segments + product pricing
 
 ## Roadmap
 - [ ] Replace canvas drawing with auto-detect via a CV/ML model
 - [ ] Replace 2D preview with a 3D / AI renderer
-- [ ] Wholesaler template editor (logo, accent color, terms)
+- [ ] Dealer template editor (logo, accent color, terms)
 - [ ] Email/SMS delivery of approval links
 - [ ] Multi-currency support
 - [ ] Inventory / lead-time integration
