@@ -175,9 +175,10 @@ model Quote {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  lineItems QuoteLineItem[]
-  projectId String?
-  project   Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  lineItems    QuoteLineItem[]
+  projectId    String?
+  project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  installation Installation?
 
   @@index([wholesalerId])
   @@index([status])
@@ -331,4 +332,115 @@ model ProjectVisualization {
   generatedAt DateTime                 @default(now())
 
   @@index([projectId, kind])
+}
+
+// ---------------------------------------------------------------------------
+// Installation traceability
+// ---------------------------------------------------------------------------
+// An Installation is the post-quote, on-site execution record. It tracks the
+// physical work the installer does, the photo evidence they capture, and the
+// milestone updates visible to the wholesaler and end customer. Each
+// Installation has exactly one Quote (1:1, quoteId @unique) and lives a
+// linear lifecycle SCHEDULED -> MATERIALS_ORDERED -> IN_PROGRESS -> COMPLETED
+// -> INSPECTED. CANCELLED is a side branch that exits the lifecycle.
+
+enum InstallationStatus {
+  SCHEDULED // Quote approved, awaiting kickoff
+  MATERIALS_ORDERED
+  IN_PROGRESS
+  COMPLETED // Installer marked done; awaiting customer inspection
+  INSPECTED // Customer signed off
+  CANCELLED
+}
+
+enum InstallationEventType {
+  SCHEDULED
+  KICKOFF
+  MATERIALS_ORDERED
+  MATERIALS_RECEIVED
+  POSTS_SET
+  PANELS_HUNG
+  GATE_INSTALLED
+  PHOTO_UPLOADED
+  NOTE_ADDED
+  IN_PROGRESS
+  COMPLETED
+  INSPECTED
+  CUSTOMER_APPROVED
+  CANCELLED
+  PUBLIC_LINK_ISSUIED
+}
+
+model Installation {
+  id             String             @id @default(cuid())
+  quote          Quote              @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  quoteId        String             @unique // one installation per quote
+  status         InstallationStatus @default(SCHEDULED)
+  scheduledStart DateTime?
+  scheduledEnd   DateTime?
+  installerName  String? // free-form (wholesaler types when issuing link)
+  installerPhone String?
+  installerEmail String?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  inspectedAt    DateTime?
+  cancelledAt    DateTime?
+
+  events        InstallationEvent[]
+  photos        InstallationPhoto[]
+  customerLinks PublicCustomerLink[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([scheduledStart])
+}
+
+model InstallationEvent {
+  id             String                @id @default(cuid())
+  installation   Installation          @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  installationId String
+  type           InstallationEventType
+  actorKind      String // "WHOLESALER_OWNER" | "WHOLESALER_STAFF" | "INSTALLER" | "CUSTOMER" | "SYSTEM"
+  actorLabel     String? // human-readable label e.g. "Acme Fence Co (installer)"
+  note           String?               @db.Text
+  occurredAt     DateTime              @default(now())
+  metadata       Json? // free-form (gateCount changed, materials list, etc.)
+
+  @@index([installationId, occurredAt])
+}
+
+model InstallationPhoto {
+  id               String       @id @default(cuid())
+  installation     Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  installationId   String
+  kind             String // "BEFORE" | "DURING" | "AFTER" | "ISSUE" - keep as String for future flexibility
+  caption          String?
+  originalFilename String
+  mimeType         String
+  sizeBytes        Int
+  widthPx          Int?
+  heightPx         Int?
+  data             Bytes
+  uploadedByKind   String // "INSTALLER" | "WHOLESALER" | "CUSTOMER"
+  uploadedByLabel  String?
+  takenAt          DateTime? // when photo was actually taken (vs upload time)
+  uploadedAt       DateTime     @default(now())
+
+  @@index([installationId, kind])
+}
+
+model PublicCustomerLink {
+  id             String       @id @default(cuid())
+  installation   Installation @relation(fields: [installationId], references: [id], onDelete: Cascade)
+  installationId String
+  token          String       @unique // random 32-byte hex
+  purpose        String // "STATUS_UPDATE" | "COMPLETION_REVIEW" | "ALL"
+  revokedAt      DateTime?
+  lastViewedAt   DateTime?
+  expiresAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([installationId])
 }
