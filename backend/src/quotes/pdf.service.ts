@@ -42,12 +42,24 @@ export class PdfService {
       if (quote.projectAddress) doc.text(quote.projectAddress);
       doc.moveDown(1);
 
-      // Render preview if available
+      // 2D top-down composite (legacy) preview, if available.
       if (quote.renderUrl) {
         try {
-          const url = quote.renderUrl.startsWith('/static/')
-            ? join(process.env.DATA_DIR || './data', quote.renderUrl.replace('/static/', ''))
+          const url = quote.renderUrl.startsWith('/static/') || quote.renderUrl.startsWith('/public/')
+            ? join(process.env.DATA_DIR || './data', quote.renderUrl.replace(/^\/(static|public)\//, ''))
             : quote.renderUrl;
+          const buf = await fs.readFile(url);
+          doc.image(buf, { fit: [480, 240], align: 'center' });
+          doc.moveDown(0.5);
+        } catch (_) { /* ignore */ }
+      }
+
+      // AI overview render (single "scene overview" image).
+      if (quote.aiOverviewImageUrl) {
+        try {
+          const url = quote.aiOverviewImageUrl.startsWith('/static/') || quote.aiOverviewImageUrl.startsWith('/public/')
+            ? join(process.env.DATA_DIR || './data', quote.aiOverviewImageUrl.replace(/^\/(static|public)\//, ''))
+            : quote.aiOverviewImageUrl;
           const buf = await fs.readFile(url);
           doc.image(buf, { fit: [480, 240], align: 'center' });
           doc.moveDown(0.5);
@@ -71,7 +83,9 @@ export class PdfService {
       doc.moveDown(0.4);
 
       doc.fillColor('#0f172a');
-      for (const li of quote.lineItems) {
+      const aiUrls: string[] = Array.isArray(quote.aiImageUrls) ? quote.aiImageUrls : [];
+      for (let i = 0; i < quote.lineItems.length; i++) {
+        const li = quote.lineItems[i];
         const y = doc.y;
         const desc = `${li.description}${li.heightOption ? ` (${li.heightOption})` : ''}${li.colorOption ? ` [${li.colorOption}]` : ''}`;
         doc.fontSize(9).text(desc, colDesc, y, { width: 270 });
@@ -79,6 +93,20 @@ export class PdfService {
         doc.text(`$${Number(li.unitPrice).toFixed(2)}`, colUnit, y, { width: 70, align: 'right' });
         doc.text(`$${Number(li.lineTotal).toFixed(2)}`, colTotal, y, { width: 80, align: 'right' });
         doc.moveDown(0.5);
+        // Per-line-item AI render: a 480x180 thumbnail under
+        // the table row. Skipped when no image was generated
+        // for this index (empty string in the array).
+        const aiUrl = aiUrls[i];
+        if (aiUrl) {
+          try {
+            const url = aiUrl.startsWith('/static/') || aiUrl.startsWith('/public/')
+              ? join(process.env.DATA_DIR || './data', aiUrl.replace(/^\/(static|public)\//, ''))
+              : aiUrl;
+            const buf = await fs.readFile(url);
+            doc.image(buf, colDesc, doc.y, { fit: [480, 160] });
+            doc.moveDown(5.5);
+          } catch (_) { /* ignore missing file */ }
+        }
       }
       doc.moveDown(0.5);
 

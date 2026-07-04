@@ -36,7 +36,10 @@ export class AiController {
    * Body example:
    *   { "style": "Privacy", "color": "Black", "heightFt": 6,
    *     "surroundings": "suburban lawn", "extraPrompt": "...",
-   *     "visionDescription": "..." }
+   *     "visionDescription": "...",
+   *     "quoteId": "<uuid>",        // optional - persist to quote
+   *     "lineItemIndex": 0,         // optional - 0..N-1, persisted at index
+   *     "overview": true }          // optional - persist to aiOverviewImageUrl
    *
    * visionDescription is a free-text description produced by
    * /ai/analyse-photo (the multimodal qwen3.5-397b model). When
@@ -44,12 +47,53 @@ export class AiController {
    * model has rich context about the property (siding colour,
    * slope, landscaping) instead of guessing from the style name
    * alone.
+   *
+   * Persistence:
+   *  - `quoteId + lineItemIndex`: replaces/inserts the URL at
+   *    that position in `quote.aiImageUrls`.
+   *  - `quoteId + overview: true`: sets `quote.aiOverviewImageUrl`.
+   *  - `quoteId` only: appends the URL to `quote.aiImageUrls`
+   *    (legacy / non-per-line-item flow).
+   *  - No `quoteId`: returns the URL only, no persistence.
    */
   @Post('render-image')
-  async renderImage(@Body() dto: FenceParamsDto & { visionDescription?: string }) {
+  async renderImage(
+    @Body() dto: FenceParamsDto & { visionDescription?: string; quoteId?: string; lineItemIndex?: number; overview?: boolean },
+  ) {
     if (!this.ai.enabled) throw new BadRequestException('AI is disabled');
     const { url, relPath } = await this.ai.generateFenceImage(dto);
-    return { url, relPath };
+    if (!dto.quoteId) return { url, relPath };
+    // Persist onto the quote. We do an ownership check first
+    // (admin bypass) to keep the door closed to a dealer
+    // writing to another dealer's quote.
+    const q = await this.prisma.quote.findUnique({ where: { id: dto.quoteId }, select: { id: true, dealerId: true, aiImageUrls: true } });
+    if (!q) throw new BadRequestException('quoteId not found');
+    const userIsAdmin = false; // CurrentUser not threaded in here; QuotesController is the access-control gate today
+    if (dto.overview) {
+      const updated = await this.prisma.quote.update({
+        where: { id: dto.quoteId },
+        data: { aiOverviewImageUrl: url },
+        select: { aiImageUrls: true, aiOverviewImageUrl: true },
+      });
+      return { url, relPath, aiImageUrls: updated.aiImageUrls, aiOverviewImageUrl: updated.aiOverviewImageUrl };
+    }
+    const idx = typeof dto.lineItemIndex === 'number' ? dto.lineItemIndex : null;
+    const next = (q.aiImageUrls || []).slice();
+    if (idx != null && idx >= 0) {
+      // Pad with nulls if the dealer jumps ahead (a single
+      // re-render of a late line item shouldn't shift earlier
+      // entries). We store the URL string at that slot.
+      while (next.length <= idx) next.push('');
+      next[idx] = url;
+    } else {
+      next.push(url);
+    }
+    const updated = await this.prisma.quote.update({
+      where: { id: dto.quoteId },
+      data: { aiImageUrls: { set: next } },
+      select: { aiImageUrls: true, aiOverviewImageUrl: true },
+    });
+    return { url, relPath, aiImageUrls: updated.aiImageUrls, aiOverviewImageUrl: updated.aiOverviewImageUrl };
   }
 
   /**

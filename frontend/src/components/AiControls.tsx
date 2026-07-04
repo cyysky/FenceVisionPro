@@ -8,9 +8,17 @@ interface Props {
   heightFt: number;    // e.g. 6
   panelCount?: number;
   gateCount?: number;
-  onImage?: (url: string) => void;     // called with a server-side URL (server-rendered AI image)
+  onImage?: (url: string, full?: { url: string; relPath: string; aiImageUrls?: string[]; aiOverviewImageUrl?: string | null }) => void; // called with the URL (and full payload when persisted)
   onSnapshot?: (dataUrl: string) => void; // called with a data: URL when 3D snapshot is captured
-  quoteId?: string;                   // if provided, the snapshot is POSTed to the backend
+  quoteId?: string;                   // if provided, the snapshot is POSTed to the backend and the AI image is persisted onto the quote
+  /**
+   * When quoteId is set, the AI image is persisted to
+   * `quote.aiImageUrls[lineItemIndex]`. If `overview` is true the
+   * image is persisted to `quote.aiOverviewImageUrl` instead and
+   * `lineItemIndex` is ignored.
+   */
+  lineItemIndex?: number;
+  overview?: boolean;
   onAnalyse?: (result: AnalyseResult) => void; // vision-model inference from an uploaded photo
   /**
    * URL of the customer's house photo that the parent page
@@ -49,7 +57,7 @@ export interface AnalyseResult {
  * sandboxed iframe once it loads; users can also capture the 3D
  * frame as the quote's persisted render.
  */
-export function AiControls({ style, color, heightFt, panelCount, gateCount, onImage, onSnapshot, quoteId, onAnalyse, housePhotoUrl, initialCode, onCode }: Props) {
+export function AiControls({ style, color, heightFt, panelCount, gateCount, onImage, onSnapshot, quoteId, onAnalyse, housePhotoUrl, initialCode, onCode, lineItemIndex, overview }: Props) {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [code, setCode] = useState<string | null>(initialCode || null);
@@ -98,11 +106,16 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
           setErr(prev => prev ? prev : (e?.response?.data?.message || 'Photo analysis failed - generating without property context'));
         }
       }
+      // Pass the quoteId so the backend persists the URL into
+      // quote.aiImageUrls (or aiOverviewImageUrl when overview=true).
+      // The "overview" flag is exposed via the parent - the per-line
+      // vs per-overview choice is made by the caller.
       const { data } = await api.post('/ai/render-image', {
         style, color, heightFt, panelCount, gateCount, visionDescription,
+        ...(quoteId ? { quoteId, lineItemIndex: typeof lineItemIndex === 'number' ? lineItemIndex : undefined, overview: !!overview } : {}),
       });
       setImageUrl(data.url);
-      onImage?.(data.url);
+      onImage?.(data.url, data);
     } catch (e: any) {
       setErr(e?.response?.data?.message || 'AI image generation failed');
     } finally { setBusy(null); }

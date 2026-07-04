@@ -174,6 +174,11 @@ export class QuotesService {
       selectedDesign: q.selectedDesign ? { id: q.selectedDesign.id, name: q.selectedDesign.name, overlayUrl: q.selectedDesign.overlayUrl } : null,
       renderUrl: q.renderUrl,
       threeJsCode: q.threeJsCode || null,
+      // Per-line-item AI renders (customer-facing). Empty strings
+      // in the array mean the dealer hasn't generated that one
+      // yet - the UI shows a placeholder.
+      aiImageUrls: q.aiImageUrls || [],
+      aiOverviewImageUrl: q.aiOverviewImageUrl || null,
       // Public-safe dealer block: name + logo only. The dealer's
       // direct contact email/phone is internal PII and must not be
       // exposed to anyone holding the approval link.

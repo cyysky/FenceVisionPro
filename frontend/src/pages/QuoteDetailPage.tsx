@@ -146,6 +146,64 @@ export default function QuoteDetailPage() {
     } catch { /* best-effort */ }
   }
 
+  /**
+   * Generate the AI render for a single line item. The backend
+   * persists the URL into quote.aiImageUrls[index] so it
+   * survives a refresh and shows up in the generated PDF.
+   * Sequential rather than parallel: the upstream is sometimes
+   * rate-limited and we don't want to fire 6 in parallel.
+   */
+  async function generateOneAiImage(lineItemIndex: number) {
+    setBusy(`ai-${lineItemIndex}`);
+    try {
+      const item = quote.lineItems?.[lineItemIndex];
+      if (!item) return;
+      // Splice in the latest analyse result if the dealer
+      // uploaded a photo - same logic as the global AiControls.
+      let visionDescription: string | undefined;
+      try {
+        const { data: ana } = await api.get(`/quotes/${id}/photo-analyses`).catch(() => ({ data: null }) as any);
+        const latest = Array.isArray(ana?.photoAnalyses) ? ana.photoAnalyses[ana.photoAnalyses.length - 1] : null;
+        if (latest) {
+          visionDescription = [latest.notes, latest.surroundings].filter(Boolean).join('. ') || latest.description;
+        }
+      } catch { /* no analyse available, fall through */ }
+      const { data } = await api.post('/ai/render-image', {
+        style: designStyle,
+        color: item.colorOption || color,
+        heightFt: (() => {
+          const m = String(item.heightOption || `${heightFt}ft`).match(/(\d+)/);
+          return m ? Number(m[1]) : heightFt;
+        })(),
+        panelCount: 1,
+        visionDescription,
+        quoteId: id,
+        lineItemIndex,
+      });
+      setQuote((q: any) => ({ ...q, aiImageUrls: data.aiImageUrls || q.aiImageUrls }));
+      toast.success(`Generated image for item ${lineItemIndex + 1}`);
+    } catch (e: any) {
+      toast.error(apiErrorMessage(e, 'Could not generate image'));
+    } finally { setBusy(null); }
+  }
+
+  /**
+   * Walk every line item and call /ai/render-image once each.
+   * The backend stores the URL at the matching index, so the
+   * operation is idempotent (re-running overwrites previous
+   * results for that slot).
+   */
+  async function generateAllAiImages() {
+    if (!quote.lineItems?.length) return;
+    setBusy('ai-all');
+    try {
+      for (let i = 0; i < quote.lineItems.length; i++) {
+        await generateOneAiImage(i);
+      }
+      toast.success(`Generated ${quote.lineItems.length} images`);
+    } finally { setBusy(null); }
+  }
+
   async function copyLink() {
     const link = `${window.location.origin}/approve/${quote.id}`;
     try {
@@ -334,6 +392,48 @@ export default function QuoteDetailPage() {
           />
         </section>
 
+        {Array.isArray(quote.lineItems) && quote.lineItems.length > 0 && (
+          <section className="bg-white border rounded p-4">
+            <div className="flex items-center justify-between gap-2 flex-wrap mb-3">
+              <div>
+                <h2 className="font-semibold">Per-item AI renders</h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  One photorealistic image per line item. Saved to this quote so it
+                  survives a page refresh and shows up in the generated PDF.
+                </p>
+              </div>
+              <button
+                onClick={generateAllAiImages}
+                disabled={busy === 'ai-all' || !quote.lineItems?.length}
+                className="px-3 py-1.5 border rounded text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+                title="Generate (or regenerate) the AI image for every line item"
+              >
+                {busy === 'ai-all' ? 'Generating all…' : '✨ Generate all items'}
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {quote.lineItems.map((li: any, idx: number) => (
+                <LineItemRenderCard
+                  key={li.id}
+                  index={idx}
+                  description={li.description}
+                  heightOption={li.heightOption}
+                  colorOption={li.colorOption}
+                  imageUrl={quote.aiImageUrls?.[idx] || ''}
+                  busy={busy === `ai-${idx}`}
+                  onGenerate={() => generateOneAiImage(idx)}
+                />
+              ))}
+            </div>
+            {quote.aiOverviewImageUrl && (
+              <div className="mt-4 pt-3 border-t">
+                <div className="text-xs text-slate-500 mb-2">Scene overview:</div>
+                <img src={quote.aiOverviewImageUrl} alt="Scene overview" className="max-h-48 rounded border" />
+              </div>
+            )}
+          </section>
+        )}
+
         <section className="bg-white border rounded overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500 border-b">
@@ -449,5 +549,50 @@ function StatusTimeline({ status, createdAt, sentAt, approvedAt, rejectedAt }: {
         );
       })}
     </ol>
+  );
+}
+
+/**
+ * Card for a single line item in the per-item AI renders grid.
+ * Shows the item description, its current image (or a placeholder),
+ * and a Generate / Regenerate button. The image URL is read from
+ * quote.aiImageUrls[index] (parent passes the value down) and
+ * written back via the parent's generateOneAiImage callback.
+ */
+function LineItemRenderCard({
+  index, description, heightOption, colorOption, imageUrl, busy, onGenerate,
+}: {
+  index: number;
+  description: string;
+  heightOption?: string | null;
+  colorOption?: string | null;
+  imageUrl: string;
+  busy: boolean;
+  onGenerate: () => void;
+}) {
+  return (
+    <div className="border rounded p-3 flex flex-col gap-2 bg-slate-50">
+      <div className="text-xs text-slate-500">Item {index + 1}</div>
+      <div className="text-sm font-medium leading-snug line-clamp-2">{description}</div>
+      <div className="text-xs text-slate-500">
+        {heightOption ? `${heightOption}` : ''}
+        {heightOption && colorOption ? ' · ' : ''}
+        {colorOption ? `${colorOption}` : ''}
+      </div>
+      <div className="aspect-video bg-white border rounded overflow-hidden flex items-center justify-center">
+        {imageUrl ? (
+          <img src={imageUrl} alt={`Render of ${description}`} className="w-full h-full object-cover" />
+        ) : (
+          <span className="text-xs text-slate-400 px-3 text-center">No AI render yet</span>
+        )}
+      </div>
+      <button
+        onClick={onGenerate}
+        disabled={busy}
+        className="px-2 py-1.5 border border-brand-600 text-brand-700 rounded text-xs font-medium hover:bg-brand-50 disabled:opacity-50"
+      >
+        {busy ? 'Generating…' : imageUrl ? '🔄 Regenerate' : '✨ Generate image'}
+      </button>
+    </div>
   );
 }
