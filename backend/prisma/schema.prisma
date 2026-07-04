@@ -36,11 +36,13 @@ model Dealer {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  users     User[]
-  priceList PriceOverride[]
-  quotes    Quote[]
-  template  QuoteTemplate?
-  projects  Project[]
+  users       User[]
+  priceList   PriceOverride[]
+  quotes      Quote[]
+  template    QuoteTemplate?
+  projects    Project[]
+  installers  Installer[]
+  invoices    Invoice[]
 }
 
 model User {
@@ -179,6 +181,7 @@ model Quote {
   projectId    String?
   project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   installation Installation?
+  invoices     Invoice[]
 
   @@index([dealerId])
   @@index([status])
@@ -378,9 +381,11 @@ model Installation {
   status         InstallationStatus @default(SCHEDULED)
   scheduledStart DateTime?
   scheduledEnd   DateTime?
-  installerName  String? // free-form (wholesaler types when issuing link)
+  installerName  String? // free-form (snapshot taken at issue time)
   installerPhone String?
   installerEmail String?
+  installer      Installer? @relation(fields: [installerId], references: [id], onDelete: SetNull)
+  installerId    String?
   startedAt      DateTime?
   completedAt    DateTime?
   inspectedAt    DateTime?
@@ -395,6 +400,7 @@ model Installation {
 
   @@index([status])
   @@index([scheduledStart])
+  @@index([installerId])
 }
 
 model InstallationEvent {
@@ -443,4 +449,91 @@ model PublicCustomerLink {
   createdAt      DateTime     @default(now())
 
   @@index([installationId])
+}
+
+// ---------------------------------------------------------------------------
+// Installer directory
+// ---------------------------------------------------------------------------
+// An Installer is a contractor a dealer can assign to an
+// installation. The free-form `installerName` / `installerPhone` /
+// `installerEmail` on Installation are kept as a denormalised
+// snapshot (so the audit trail and public views stay stable when
+// the installer is later renamed or deleted); this model is the
+// source of truth for *who* the installer currently is.
+
+enum InstallerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Installer {
+  id            String           @id @default(cuid())
+  dealer        Dealer           @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerId      String
+  name          String
+  phone         String? // per-installer mobile — entered by the dealer, NOT seeded
+  email         String? // per-installer email — entered by the dealer, NOT seeded
+  companyName   String?
+  status        InstallerStatus  @default(ACTIVE)
+  notes         String?
+  installations Installation[]
+
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([dealerId])
+  @@index([dealerId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Invoicing
+// ---------------------------------------------------------------------------
+// An Invoice is a financial artefact derived from an APPROVED quote.
+// Status moves forward only: DRAFT → SENT → (PAID | VOID).
+// DRAFT invoices can be deleted; everything else is part of the
+// audit trail.
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  VOID
+}
+
+model Invoice {
+  id          String              @id @default(cuid())
+  dealer      Dealer              @relation(fields: [dealerId], references: [id], onDelete: Cascade)
+  dealerId    String
+  quote       Quote               @relation(fields: [quoteId], references: [id], onDelete: Restrict)
+  quoteId     String
+  number      String              @unique // e.g. "INV-2026-0001"
+  status      InvoiceStatus       @default(DRAFT)
+  issuedAt    DateTime?
+  dueAt       DateTime?
+  paidAt      DateTime?
+  subtotal    Decimal             @db.Decimal(12, 2)
+  tax         Decimal             @default(0) @db.Decimal(12, 2)
+  total       Decimal             @db.Decimal(12, 2)
+  notes       String?
+  lineItems   InvoiceLineItem[]
+
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([dealerId])
+  @@index([quoteId])
+  @@index([dealerId, status])
+}
+
+model InvoiceLineItem {
+  id          String   @id @default(cuid())
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceId   String
+  description String
+  quantity    Decimal  @db.Decimal(10, 2)
+  unitPrice   Decimal  @db.Decimal(12, 2)
+  total       Decimal  @db.Decimal(12, 2)
+  position    Int
+
+  @@index([invoiceId])
 }
