@@ -99,6 +99,7 @@ export default function DashboardPage() {
           </div>
           <nav className="ml-2 sm:ml-8 flex flex-wrap gap-3 sm:gap-4 text-sm">
             <Link to="/" className="text-slate-900 font-medium">Quotes</Link>
+            <Link to="/projects" className="text-slate-600 hover:text-brand-700">Projects</Link>
             <Link to="/products" className="text-slate-600 hover:text-brand-700">Products</Link>
             <Link to="/designs" className="text-slate-600 hover:text-brand-700">Designs</Link>
             {user?.role === 'ADMIN' && (
@@ -117,6 +118,18 @@ export default function DashboardPage() {
       </header>
 
       <main className="max-w-6xl mx-auto p-4 sm:p-6 space-y-4">
+        <section>
+          <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Quick links</h2>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <QuickLink to="/" label="Quotes" hint="Create and manage quotes" />
+            <QuickLink to="/projects" label="Projects" hint="End-customer project workspace" />
+            <QuickLink to="/products" label="Products" hint="Catalog & pricing" />
+            <QuickLink to="/designs" label="Designs" hint="Fence styles & overlays" />
+            {user?.role === 'ADMIN' && (
+              <QuickLink to="/wholesalers" label="Wholesalers" hint="Manage tenant accounts" />
+            )}
+          </div>
+        </section>
         <section className="bg-white border rounded">
           <div className="p-3 border-b flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-semibold">Quotes</h2>
@@ -248,6 +261,15 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`px-2 py-0.5 rounded text-xs whitespace-nowrap ${colors[status] || 'bg-slate-100'}`}>{status}</span>;
 }
 
+
+function QuickLink({ to, label, hint }: { to: string; label: string; hint: string }) {
+  return (
+    <Link to={to} className="block bg-white border rounded p-4 hover:border-brand-300 transition-colors">
+      <div className="font-medium">{label}</div>
+      <div className="text-xs text-slate-500 mt-0.5">{hint}</div>
+    </Link>
+  );
+}
 function ChangePasswordButton() {
   const [open, setOpen] = useState(false);
   const [oldP, setOldP] = useState('');
