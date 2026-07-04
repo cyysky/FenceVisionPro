@@ -26,6 +26,8 @@ backend/dist
 frontend/dist
 
 # Local data and uploaded files (data/overlays is checked in)
+backend/data/*
+backend/data/**/*
 data/uploads/*
 data/renders/*
 data/pdfs/*
