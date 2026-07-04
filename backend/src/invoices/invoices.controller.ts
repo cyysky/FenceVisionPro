@@ -74,9 +74,15 @@ export class InvoicesController {
   async pdfDownload(@Param('id') id: string, @CurrentUser() u: JwtPayload, @Res() res: Response) {
     const invoice = await this.svc.get(id, u);
     const relUrl = await this.pdf.generateInvoice(invoice);
-    // relUrl is /static/pdfs/<filename> — read from DATA_DIR
+    // relUrl is /public/pdfs/<filename> (public bucket - so the
+    // customer-shareable link works without auth). For /public/...
+    // URLs the file lives under <DATA_DIR>/public/...; for older
+    // /static/... URLs it lives directly under <DATA_DIR>/...
     const dataDir = process.env.DATA_DIR || './data';
-    const filePath = join(dataDir, relUrl.replace(/^\/static\//, ''));
+    const stripped = relUrl.replace(/^\/(static|public)\//, '');
+    const filePath = relUrl.startsWith('/public/')
+      ? join(dataDir, 'public', stripped)
+      : join(dataDir, stripped);
     if (!existsSync(filePath)) {
       // Should not happen, but be defensive
       return res.status(500).json({ message: 'PDF render produced no file' });

@@ -76,3 +76,32 @@ describe('StorageService - saveDataUrl (3D snapshot upload)', () => {
     await expect(svc.saveDataUrl('renders', `data:image/png;base64,${big}`)).rejects.toThrow(/too large/);
   });
 });
+
+describe('StorageService - writePublicStream (Step 1: customer-shareable bucket)', () => {
+  let svc: any;
+  let tmp: string;
+
+  beforeEach(() => {
+    tmp = mkdtempSync(join(tmpdir(), 'fvp-pub-'));
+    process.env.DATA_DIR = tmp;
+    svc = new (require('./storage.service').StorageService)();
+  });
+  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+
+  it('writes a file under <DATA_DIR>/public/<subdir>/', async () => {
+    const { absPath, relPath, stream } = await svc.writePublicStream('pdfs', 'quote-abc.pdf');
+    await new Promise<void>((resolve, reject) => {
+      stream.on('finish', () => resolve());
+      stream.on('error', reject);
+      stream.end(Buffer.from('hello public'));
+    });
+    expect(relPath).toBe('public/pdfs/quote-abc.pdf');
+    expect(absPath).toBe(join(tmp, 'public', 'pdfs', 'quote-abc.pdf'));
+    expect(statSync(absPath).isFile()).toBe(true);
+    expect(readFileSync(absPath, 'utf-8')).toBe('hello public');
+  });
+
+  it('urlForPublic returns a /public/ URL', () => {
+    expect(svc.urlForPublic('pdfs/quote-abc.pdf')).toBe('/public/pdfs/quote-abc.pdf');
+  });
+});

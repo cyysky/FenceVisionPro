@@ -11,7 +11,7 @@ export class PdfService {
 
   async generate(quote: any): Promise<string> {
     const filename = `${quote.id}.pdf`;
-    const { absPath, relPath } = await this.storage.writeStream('pdfs', filename);
+    const { absPath, relPath } = await this.storage.writePublicStream('pdfs', filename);
     return new Promise<string>(async (resolve, reject) => {
       const doc = new PDFDocument({ size: 'A4', margin: 50 });
       const stream = createWriteStream(absPath);
@@ -121,7 +121,7 @@ export class PdfService {
 
       doc.fontSize(7).fillColor('#94a3b8').text('Yardex — Design To Inspire, Engineered To Endure.', 50, doc.page.height - 40, { width: 495, align: 'center' });
       doc.end();
-      stream.on('finish', () => resolve(`/static/pdfs/${filename}`));
+      stream.on('finish', () => resolve(`/public/pdfs/${filename}`));
       stream.on('error', reject);
     });
   }
@@ -132,7 +132,7 @@ export class PdfService {
    */
   async generateInvoice(invoice: any): Promise<string> {
     const filename = `invoice-${invoice.id}.pdf`;
-    const { absPath, relPath } = await this.storage.writeStream('pdfs', filename);
+    const { absPath, relPath } = await this.storage.writePublicStream('pdfs', filename);
     return new Promise<string>((resolve, reject) => {
       const doc = new PDFDocument({ size: 'A4', margin: 50 });
       const stream = createWriteStream(absPath);
@@ -191,7 +191,7 @@ export class PdfService {
 
       doc.fontSize(7).fillColor('#94a3b8').text('Yardex — Design To Inspire, Engineered To Endure.', 50, doc.page.height - 40, { width: 495, align: 'center' });
       doc.end();
-      stream.on('finish', () => resolve(`/static/pdfs/${filename}`));
+      stream.on('finish', () => resolve(`/public/pdfs/${filename}`));
       stream.on('error', reject);
     });
   }

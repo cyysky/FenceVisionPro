@@ -58,9 +58,32 @@ export class StorageService {
     return { absPath, relPath: `${subdir}/${filename}`, stream };
   }
 
+  /**
+   * Like writeStream but writes under `<dataDir>/public/<subdir>/`.
+   * Files in this subtree are exposed publicly via the
+   * unauthenticated `/public/<subdir>/:filename` route in
+   * AssetsController and the `/public/` nginx location - so
+   * ONLY put customer-shareable artefacts here (PDFs that are
+   * sent to customers via the approval link / email). Drafts
+   * and other PII-bearing assets must stay in the guarded
+   * `pdfs`/`signatures` buckets.
+   */
+  async writePublicStream(subdir: string, filename: string): Promise<{ absPath: string; relPath: string; stream: NodeJS.WritableStream }> {
+    const absPath = this.resolve(join('public', subdir), filename);
+    await fs.mkdir(join(this.dataDir, 'public', subdir), { recursive: true });
+    const stream = createWriteStream(absPath);
+    return { absPath, relPath: `public/${subdir}/${filename}`, stream };
+  }
+
   urlFor(relPath: string) {
     return `/static/${relPath}`;
   }
+
+  urlForPublic(relPath: string) {
+    return `/public/${relPath}`;
+  }
+
+
 
   /**
    * Save a base64-encoded image (data URL or pure base64) to disk.
