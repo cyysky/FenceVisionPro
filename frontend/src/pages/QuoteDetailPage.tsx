@@ -450,6 +450,34 @@ export default function QuoteDetailPage() {
           </section>
         )}
 
+        {Array.isArray(quote.photoAnalyses) && quote.photoAnalyses.length > 0 && (
+          <section className="bg-white border rounded p-4">
+            <h2 className="font-semibold mb-2">Photo analyses</h2>
+            <p className="text-xs text-slate-500 mb-3">
+              The vision model has inferred the following from customer-uploaded
+              house photos. Each entry is saved on this quote so the inferred
+              values can be re-used in the AI image prompt.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {quote.photoAnalyses.map((a: any, i: number) => (
+                <div key={i} className="border rounded p-3 flex flex-col gap-2 bg-slate-50">
+                  {a.url && <img src={a.url} alt={`Photo analysis ${i + 1}`} className="aspect-video object-cover bg-white border rounded" />}
+                  <ul className="text-xs text-slate-700 space-y-0.5">
+                    {a.style && <li>Style: <b>{a.style}</b></li>}
+                    {a.color && <li>Color: <b>{a.color}</b></li>}
+                    {a.heightFt != null && <li>Height: <b>{a.heightFt}ft</b></li>}
+                    {a.surroundings && <li>Surroundings: <span className="italic">{a.surroundings}</span></li>}
+                    {a.confidence != null && <li>Confidence: {Math.round(Number(a.confidence) * 100)}%</li>}
+                  </ul>
+                  <div className="text-[10px] text-slate-400">
+                    {a.createdAt ? new Date(a.createdAt).toLocaleString() : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         <section className="bg-white border rounded overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-slate-500 border-b">

@@ -179,6 +179,12 @@ export class QuotesService {
       // yet - the UI shows a placeholder.
       aiImageUrls: q.aiImageUrls || [],
       aiOverviewImageUrl: q.aiOverviewImageUrl || null,
+      // Vision-model analyses of customer-uploaded house photos.
+      // The customer doesn't see the raw dealer notes (they're
+      // internal) - only the inferred style/color/height etc.
+      photoAnalyses: Array.isArray(q.photoAnalyses) ? (q.photoAnalyses as any[]).map((a) => ({
+        url: a.url, style: a.style, color: a.color, heightFt: a.heightFt, surroundings: a.surroundings, confidence: a.confidence, createdAt: a.createdAt,
+      })) : [],
       // Public-safe dealer block: name + logo only. The dealer's
       // direct contact email/phone is internal PII and must not be
       // exposed to anyone holding the approval link.

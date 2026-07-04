@@ -181,6 +181,10 @@ model Quote {
   // property, as opposed to per-line-item close-ups. Set
   // explicitly via /ai/render-image with `overview: true`.
   aiOverviewImageUrl String?
+  // Array of { url, description, dimensions, materials, createdAt }
+  // for analyses the dealer has run via /ai/analyse-photo against
+  // this quote. NULL until the first analysis is run. Append-only.
+  photoAnalyses     Json?
 
   subtotal  Decimal @default(0) @db.Decimal(12, 2)
   taxRate   Decimal @default(0) @db.Decimal(5, 2)

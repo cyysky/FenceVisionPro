@@ -96,7 +96,7 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
           .filter(Boolean).join('. ') || analyseResult.raw;
       } else if (housePhotoUrl) {
         try {
-          const { data } = await api.post('/ai/analyse-photo-url', { imageUrl: housePhotoUrl });
+          const { data } = await api.post('/ai/analyse-photo-url', { imageUrl: housePhotoUrl, quoteId });
           setAnalyseResult(data);
           onAnalyse?.(data);
           visionDescription = [data.notes, data.surroundings].filter(Boolean).join('. ') || data.raw;
@@ -169,6 +169,7 @@ export function AiControls({ style, color, heightFt, panelCount, gateCount, onIm
     try {
       const fd = new FormData();
       fd.append('file', file);
+      if (quoteId) fd.append('quoteId', quoteId);
       const { data } = await api.post('/ai/analyse-photo', fd, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });

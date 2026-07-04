@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Param, Post, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { AuthGuard } from '@nestjs/passport';
@@ -144,7 +144,10 @@ export class AiController {
       else cb(new BadRequestException(`Unsupported image type: ${mime}`), false);
     },
   }))
-  async analysePhoto(@UploadedFile() file: { originalname: string; buffer: Buffer; size: number; mimetype: string }) {
+  async analysePhoto(
+    @UploadedFile() file: { originalname: string; buffer: Buffer; size: number; mimetype: string },
+    @Body() body: { quoteId?: string },
+  ) {
     if (!this.ai.enabled) throw new BadRequestException('AI is disabled');
     if (!file) throw new BadRequestException('file is required (multipart field "file")');
     // Inline the bytes as a data URL so the upstream doesn't
@@ -155,7 +158,48 @@ export class AiController {
     // Also persist a copy under /static/uploads so the frontend
     // can preview the image alongside the inferred values.
     const stored = await this.storage.saveBuffer('uploads', file.originalname || 'photo', file.buffer, mime);
+    if (body?.quoteId) {
+      await this.persistPhotoAnalysis(body.quoteId, {
+        url: stored.url,
+        description: result.notes || result.raw || '',
+        style: result.style,
+        color: result.color,
+        heightFt: result.heightFt,
+        surroundings: result.surroundings,
+        confidence: result.confidence,
+        createdAt: new Date().toISOString(),
+      });
+    }
     return { ...result, imageUrl: stored.url };
+  }
+
+  /**
+   * Append a new photo-analysis record to quote.photoAnalyses
+   * (JSONB array). Returns the updated array. We do a read-modify-
+   * write because Prisma's JSON ops are not always available in
+   * every Postgres configuration.
+   */
+  private async persistPhotoAnalysis(quoteId: string, entry: Record<string, any>): Promise<any[]> {
+    const q = await this.prisma.quote.findUnique({ where: { id: quoteId }, select: { id: true, photoAnalyses: true } });
+    if (!q) throw new BadRequestException('quoteId not found');
+    const list = Array.isArray(q.photoAnalyses) ? q.photoAnalyses : [];
+    const next = [...list, entry];
+    await this.prisma.quote.update({
+      where: { id: quoteId },
+      data: { photoAnalyses: next as any },
+    });
+    return next;
+  }
+
+  /**
+   * Read photoAnalyses for a quote. Read-only; used by the
+   * QuoteDetail page to display the gallery of past analyses.
+   */
+  @Get('quote/:quoteId/photo-analyses')
+  async getPhotoAnalyses(@Param('quoteId') quoteId: string) {
+    const q = await this.prisma.quote.findUnique({ where: { id: quoteId }, select: { photoAnalyses: true } });
+    if (!q) throw new BadRequestException('quoteId not found');
+    return { photoAnalyses: q.photoAnalyses || [] };
   }
 
   /**
@@ -165,9 +209,22 @@ export class AiController {
    * endpoint and we just want to re-analyse it.
    */
   @Post('analyse-photo-url')
-  async analysePhotoUrl(@Body() body: { imageUrl: string }) {
+  async analysePhotoUrl(@Body() body: { imageUrl: string; quoteId?: string }) {
     if (!this.ai.enabled) throw new BadRequestException('AI is disabled');
     if (!body?.imageUrl) throw new BadRequestException('imageUrl is required');
-    return this.ai.analysePhoto({ imageUrl: body.imageUrl });
+    const result = await this.ai.analysePhoto({ imageUrl: body.imageUrl });
+    if (body?.quoteId) {
+      await this.persistPhotoAnalysis(body.quoteId, {
+        url: body.imageUrl,
+        description: result.notes || result.raw || '',
+        style: result.style,
+        color: result.color,
+        heightFt: result.heightFt,
+        surroundings: result.surroundings,
+        confidence: result.confidence,
+        createdAt: new Date().toISOString(),
+      });
+    }
+    return result;
   }
 }

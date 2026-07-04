@@ -154,3 +154,71 @@ describe('AiController - generate-3d quote persistence (Step 3)', () => {
       .rejects.toThrow(/disabled/i);
   });
 });
+
+describe('AiController - photo analysis persistence (Step 4)', () => {
+  let ctrl: AiController;
+  let ai: any;
+  let prisma: any;
+  let storage: any;
+
+  beforeEach(async () => {
+    ai = {
+      enabled: true,
+      analysePhoto: jest.fn().mockResolvedValue({ style: 'Privacy', color: 'Black', heightFt: 6, surroundings: 'suburban lawn', confidence: 0.9, notes: 'A suburban home' }),
+    };
+    prisma = {
+      quote: { findUnique: jest.fn(), update: jest.fn() },
+    };
+    storage = { saveBuffer: jest.fn().mockResolvedValue({ url: '/static/uploads/p.png' }) };
+    const mod = await Test.createTestingModule({
+      controllers: [AiController],
+      providers: [
+        { provide: AiService, useValue: ai },
+        { provide: PrismaService, useValue: prisma },
+        { provide: require('../storage/storage.service').StorageService, useValue: storage },
+      ],
+    }).compile();
+    ctrl = mod.get(AiController);
+  });
+
+  it('does not persist when quoteId is not provided to analysePhotoUrl', async () => {
+    const out = await ctrl.analysePhotoUrl({ imageUrl: '/static/uploads/p.png' } as any);
+    expect(out.style).toBe('Privacy');
+    expect(prisma.quote.update).not.toHaveBeenCalled();
+  });
+
+  it('appends the analysis to quote.photoAnalyses when quoteId is provided', async () => {
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', photoAnalyses: [] });
+    prisma.quote.update.mockResolvedValue({ id: 'q1' });
+    await ctrl.analysePhotoUrl({ imageUrl: '/static/uploads/p.png', quoteId: 'q1' } as any);
+    expect(prisma.quote.update).toHaveBeenCalled();
+    const call = prisma.quote.update.mock.calls[0][0];
+    expect(call.where).toEqual({ id: 'q1' });
+    expect(Array.isArray(call.data.photoAnalyses)).toBe(true);
+    expect(call.data.photoAnalyses).toHaveLength(1);
+    expect(call.data.photoAnalyses[0]).toMatchObject({ url: '/static/uploads/p.png', style: 'Privacy' });
+  });
+
+  it('appends to an existing photoAnalyses array (does not overwrite)', async () => {
+    const existing = [{ url: '/uploads/old.png', description: 'old', createdAt: '2025-01-01T00:00:00Z' }];
+    prisma.quote.findUnique.mockResolvedValue({ id: 'q1', photoAnalyses: existing });
+    prisma.quote.update.mockResolvedValue({ id: 'q1' });
+    await ctrl.analysePhotoUrl({ imageUrl: '/uploads/new.png', quoteId: 'q1' } as any);
+    const call = prisma.quote.update.mock.calls[0][0];
+    expect(call.data.photoAnalyses).toHaveLength(2);
+    expect(call.data.photoAnalyses[0].url).toBe('/uploads/old.png');
+    expect(call.data.photoAnalyses[1].url).toBe('/uploads/new.png');
+  });
+
+  it('refuses to persist when quoteId is unknown', async () => {
+    prisma.quote.findUnique.mockResolvedValue(null);
+    await expect(ctrl.analysePhotoUrl({ imageUrl: '/uploads/p.png', quoteId: 'q1' } as any))
+      .rejects.toThrow(/not found/i);
+  });
+
+  it('reads photoAnalyses via the GET endpoint', async () => {
+    prisma.quote.findUnique.mockResolvedValue({ photoAnalyses: [{ url: '/uploads/p.png', style: 'Privacy' }] });
+    const out = await ctrl.getPhotoAnalyses('q1');
+    expect(out).toEqual({ photoAnalyses: [{ url: '/uploads/p.png', style: 'Privacy' }] });
+  });
+});
