@@ -55,7 +55,7 @@ export class InstallationsService {
     const { dealerId, isAdmin } = this.authCtx(u);
     const inst = await this.prisma.installation.findUnique({
       where: { id },
-      include: { events: { orderBy: { occurredAt: 'asc' } }, photos: true, customerLinks: true },
+      include: { events: { orderBy: { occurredAt: 'asc' } }, photos: true, customerLinks: true, installer: { select: { id: true, name: true, phone: true, email: true, companyName: true, status: true } } },
       ...extra,
     });
     if (!inst) throw new NotFoundException('Installation not found');
@@ -132,6 +132,7 @@ export class InstallationsService {
       take: Math.min(Math.max(opts.limit ?? 200, 1), 500),
       include: {
         quote: { select: { id: true, reference: true, customerName: true, customerEmail: true, status: true } },
+        installer: { select: { id: true, name: true, status: true } },
         _count: { select: { events: true, photos: true, customerLinks: true } },
       },
     });
@@ -169,6 +170,26 @@ export class InstallationsService {
     if (!['APPROVED'].includes(quote.status)) {
       throw new BadRequestException(`Quote must be APPROVED before scheduling an installation (currently ${quote.status})`);
     }
+
+    // If an installerId is given, validate ownership and
+    // pre-populate the denormalised snapshot fields. Explicit
+    // free-form fields on the body win if both are provided.
+    let installerName = dto.installerName ?? null;
+    let installerPhone = dto.installerPhone ?? null;
+    let installerEmail = dto.installerEmail ?? null;
+    let installerId: string | null = null;
+    if (dto.installerId) {
+      const installer = await this.prisma.installer.findUnique({ where: { id: dto.installerId } });
+      if (!installer) throw new NotFoundException('Installer not found');
+      if (!isAdmin && installer.dealerId !== dealerId) {
+        throw new ForbiddenException('Installer belongs to another dealer');
+      }
+      installerId = installer.id;
+      if (installerName === null) installerName = installer.name;
+      if (installerPhone === null) installerPhone = installer.phone ?? null;
+      if (installerEmail === null) installerEmail = installer.email ?? null;
+    }
+
     let inst;
     try {
       inst = await this.prisma.installation.create({
@@ -177,9 +198,10 @@ export class InstallationsService {
           status: InstallationStatus.SCHEDULED,
           scheduledStart: dto.scheduledStart ? new Date(dto.scheduledStart) : null,
           scheduledEnd: dto.scheduledEnd ? new Date(dto.scheduledEnd) : null,
-          installerName: dto.installerName ?? null,
-          installerPhone: dto.installerPhone ?? null,
-          installerEmail: dto.installerEmail ?? null,
+          installerId,
+          installerName,
+          installerPhone,
+          installerEmail,
         },
       });
     } catch (e: any) {
@@ -194,7 +216,7 @@ export class InstallationsService {
       u.role,
       u.email,
       dto.note ?? null,
-      { source: 'dealer_create' },
+      { source: 'dealer_create', installerId: installerId ?? undefined },
     );
     return this.get(inst.id, u);
   }
@@ -205,6 +227,7 @@ export class InstallationsService {
    */
   async update(id: string, u: JwtPayload, dto: UpdateInstallationDto) {
     const inst = await this.findOwned(id, u);
+    const { dealerId, isAdmin } = this.authCtx(u);
     const data: any = {};
     const changed: string[] = [];
     if (dto.scheduledStart !== undefined) {
@@ -214,6 +237,22 @@ export class InstallationsService {
     if (dto.scheduledEnd !== undefined) {
       data.scheduledEnd = dto.scheduledEnd ? new Date(dto.scheduledEnd) : null;
       changed.push('scheduledEnd');
+    }
+    if (dto.installerId !== undefined) {
+      if (dto.installerId === '') {
+        // Empty string clears the FK (lets the dealer un-assign).
+        data.installerId = null;
+        changed.push('installerId');
+      } else {
+        // Validate ownership before assigning.
+        const installer = await this.prisma.installer.findUnique({ where: { id: dto.installerId } });
+        if (!installer) throw new NotFoundException('Installer not found');
+        if (!isAdmin && installer.dealerId !== dealerId) {
+          throw new ForbiddenException('Installer belongs to another dealer');
+        }
+        data.installerId = installer.id;
+        changed.push('installerId');
+      }
     }
     if (dto.installerName !== undefined) {
       data.installerName = dto.installerName || null;
@@ -498,6 +537,7 @@ export class InstallationsService {
           select: { id: true, reference: true, customerName: true, customerEmail: true, customerPhone: true, projectAddress: true, status: true },
         },
         events: { orderBy: { occurredAt: 'asc' } },
+        installer: { select: { id: true, name: true } },
         photos: {
           orderBy: { uploadedAt: 'desc' },
           select: {

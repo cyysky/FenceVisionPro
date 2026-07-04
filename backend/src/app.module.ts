@@ -12,6 +12,8 @@ import { DesignsModule } from './designs/designs.module';
 import { QuotesModule } from './quotes/quotes.module';
 import { ProjectsModule } from './projects/projects.module';
 import { InstallationsModule } from './installations/installations.module';
+import { InstallersModule } from './installers/installers.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { RenderModule } from './render/render.module';
 import { StorageModule } from './storage/storage.module';
 import { AiModule } from './ai/ai.module';
@@ -32,6 +34,8 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
     QuotesModule,
     ProjectsModule,
     InstallationsModule,
+    InstallersModule,
+    InvoicesModule,
     RenderModule,
     StorageModule,
     AiModule,

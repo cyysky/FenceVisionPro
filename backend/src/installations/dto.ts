@@ -40,6 +40,7 @@ export type LinkPurposeLiteral = typeof LINK_PURPOSES[number];
  */
 export class CreateInstallationDto {
   @IsString() @MinLength(1) @MaxLength(80) quoteId: string;
+  @IsOptional() @IsString() @MaxLength(80) installerId?: string;
   @IsOptional() @IsISO8601() scheduledStart?: string;
   @IsOptional() @IsISO8601() scheduledEnd?: string;
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MaxLength(200) installerName?: string;
@@ -58,6 +59,7 @@ export class CreateInstallationDto {
 export class UpdateInstallationDto {
   @IsOptional() @IsISO8601() scheduledStart?: string;
   @IsOptional() @IsISO8601() scheduledEnd?: string;
+  @IsOptional() @IsString() @MaxLength(80) installerId?: string;
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MaxLength(200) installerName?: string;
   @IsOptional() @Transform(TrimmedNonEmpty) @IsString() @MaxLength(50) installerPhone?: string;
   @IsOptional() @Transform(({ value }) => typeof value === 'string' ? value.trim().toLowerCase() : value) @IsString() @MaxLength(200) installerEmail?: string;
