@@ -12,6 +12,9 @@ import PublicApprovalPage from './pages/PublicApprovalPage';
 import ProductsPage from './pages/ProductsPage';
 import DesignsPage from './pages/DesignsPage';
 import WholesalersPage from './pages/WholesalersPage';
+import ProjectsPage from './pages/ProjectsPage';
+import NewProjectPage from './pages/NewProjectPage';
+import ProjectDetailPage from './pages/ProjectDetailPage';
 
 export default function App() {
   return (
@@ -24,6 +27,9 @@ export default function App() {
             <Route path="/" element={<RequireAuth><DashboardPage /></RequireAuth>} />
             <Route path="/quotes/new" element={<RequireAuth><NewQuotePage /></RequireAuth>} />
             <Route path="/quotes/:id" element={<RequireAuth><QuoteDetailPage /></RequireAuth>} />
+            <Route path="/projects" element={<RequireAuth><ProjectsPage /></RequireAuth>} />
+            <Route path="/projects/new" element={<RequireAuth><NewProjectPage /></RequireAuth>} />
+            <Route path="/projects/:id" element={<RequireAuth><ProjectDetailPage /></RequireAuth>} />
             <Route path="/products" element={<RequireAuth><ProductsPage /></RequireAuth>} />
             <Route path="/designs" element={<RequireAuth><DesignsPage /></RequireAuth>} />
             <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><WholesalersPage /></RequireAuth>} />

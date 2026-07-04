@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, apiErrorMessage } from '../lib/api';
 import {
@@ -6,7 +6,7 @@ import {
   addSelection, updateSelection, deleteSelection,
   addMeasurement, updateMeasurement, deleteMeasurement,
   uploadDocument, deleteDocument, fetchDocumentBlob,
-  generateVisualization, deleteVisualization, fetchVisualizationText,
+  generateVisualization, deleteVisualization, fetchVisualizationBlob, fetchVisualizationText,
   promoteToQuote,
 } from '../lib/projects';
 import { useToast } from '../components/ui/Toast';
@@ -857,13 +857,9 @@ function VisTile({ projectId, vis, onView, onDelete }: { projectId: string; vis:
     if (vis.kind !== 'AI_IMAGE') return;
     let cancelled = false;
     let url: string | null = null;
-    fetchVisualizationText; // (no-op, keep import warm)
-    api.get; // (no-op, keep import warm)
-    import('../lib/projects').then(({ fetchVisualizationBlob }) => {
-      fetchVisualizationBlob(projectId, vis.id)
-        .then(blob => { if (!cancelled) { url = URL.createObjectURL(blob); setThumb(url); } })
-        .catch(() => { /* ignore */ });
-    });
+    fetchVisualizationBlob(projectId, vis.id)
+      .then(blob => { if (!cancelled) { url = URL.createObjectURL(blob); setThumb(url); } })
+      .catch(() => { /* ignore */ });
     return () => { cancelled = true; if (url) URL.revokeObjectURL(url); };
   }, [projectId, vis.id, vis.kind]);
 
@@ -898,11 +894,9 @@ function VisPreviewModal({ projectId, vis, onClose }: { projectId: string; vis: 
     let cancelled = false;
     let objectUrl: string | null = null;
     if (vis.kind === 'AI_IMAGE') {
-      import('../lib/projects').then(({ fetchVisualizationBlob }) => {
-        fetchVisualizationBlob(projectId, vis.id)
-          .then(blob => { if (!cancelled) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); } })
-          .catch(() => { /* ignore */ });
-      });
+      fetchVisualizationBlob(projectId, vis.id)
+        .then(blob => { if (!cancelled) { objectUrl = URL.createObjectURL(blob); setUrl(objectUrl); } })
+        .catch(() => { /* ignore */ });
     } else {
       fetchVisualizationText(projectId, vis.id)
         .then(t => { if (!cancelled) setCode(t); })
