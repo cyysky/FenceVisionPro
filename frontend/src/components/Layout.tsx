@@ -59,6 +59,9 @@ export function Layout({ children }: { children: ReactNode }) {
                 <NavLink to="/installers" className={({ isActive }) => `px-2 py-1 rounded ${isActive ? 'text-brand-700 font-semibold' : 'text-slate-600 hover:text-brand-700 hover:bg-brand-50'}`}>
                   Installers
                 </NavLink>
+                <NavLink to="/leads" className={({ isActive }) => `px-2 py-1 rounded ${isActive ? 'text-brand-700 font-semibold' : 'text-slate-600 hover:text-brand-700 hover:bg-brand-50'}`}>
+                  Leads
+                </NavLink>
               </>
             )}
             {isAdmin && (
@@ -141,6 +144,7 @@ export function Layout({ children }: { children: ReactNode }) {
               { to: '/installations', label: 'Installations' },
               { to: '/invoices', label: 'Invoices' },
               { to: '/installers', label: 'Installers' },
+              { to: '/leads', label: 'Leads' },
               { to: '/products', label: 'Products' },
               { to: '/designs', label: 'Designs' },
               ...(isAdmin ? [{ to: '/wholesalers', label: 'Dealers' }] : []),

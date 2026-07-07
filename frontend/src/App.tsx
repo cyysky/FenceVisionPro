@@ -22,6 +22,10 @@ import InvoicesPage from './pages/InvoicesPage';
 import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import PublicInstallerView from './pages/PublicInstallerView';
 import PublicCustomerView from './pages/PublicCustomerView';
+import PublicAiGeneratePage from './pages/PublicAiGeneratePage';
+import PublicAiResultPage from './pages/PublicAiResultPage';
+import LeadsListPage from './pages/LeadsListPage';
+import LeadDetailPage from './pages/LeadDetailPage';
 import { Layout } from './components/Layout';
 
 export default function App() {
@@ -32,6 +36,10 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route path="/approve/:id" element={<PublicApprovalPage />} />
+
+            {/* Public AI Yard Visualizer - same unauthenticated shell as /approve/:id. */}
+            <Route path="/ai-generate" element={<PublicAiGeneratePage />} />
+            <Route path="/ai-generate/result/:id" element={<PublicAiResultPage />} />
 
             {/* Public installation views - NOT wrapped in RequireAuth. */}
             <Route path="/public/installation/:id/installer/:token" element={<PublicInstallerView />} />
@@ -48,6 +56,8 @@ export default function App() {
             <Route path="/installers" element={<RequireAuth><Layout><InstallersPage /></Layout></RequireAuth>} />
             <Route path="/invoices" element={<RequireAuth><Layout><InvoicesPage /></Layout></RequireAuth>} />
             <Route path="/invoices/:id" element={<RequireAuth><Layout><InvoiceDetailPage /></Layout></RequireAuth>} />
+            <Route path="/leads" element={<RequireAuth><Layout><LeadsListPage /></Layout></RequireAuth>} />
+            <Route path="/leads/:id" element={<RequireAuth><Layout><LeadDetailPage /></Layout></RequireAuth>} />
             <Route path="/products" element={<RequireAuth><Layout><ProductsPage /></Layout></RequireAuth>} />
             <Route path="/designs" element={<RequireAuth><Layout><DesignsPage /></Layout></RequireAuth>} />
             <Route path="/wholesalers" element={<RequireAuth role="ADMIN"><Layout><DealersPage /></Layout></RequireAuth>} />
