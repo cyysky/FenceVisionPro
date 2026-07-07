@@ -28,7 +28,7 @@ export function Layout({ children }: { children: ReactNode }) {
     <div className="min-h-full">
       <header className="bg-white border-b sticky top-0 z-20">
         <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-          <Link to="/" className="flex items-center gap-2 mr-2">
+          <Link to="/quotes" className="flex items-center gap-2 mr-2">
             <div className="w-7 h-7 rounded bg-brand-600 grid place-items-center text-white font-bold text-xs">Y</div>
             <span className="font-bold">Yardex</span>
             <span className="text-[10px] text-slate-400 italic hidden md:inline">Design To Inspire, Engineered to Endure.</span>
@@ -36,7 +36,7 @@ export function Layout({ children }: { children: ReactNode }) {
 
           {/* Desktop nav */}
           <nav className="hidden md:flex flex-wrap items-center gap-1 sm:gap-3 text-sm">
-            <NavLink to="/" end className={({ isActive }) => `px-2 py-1 rounded ${isActive ? 'text-brand-700 font-semibold' : 'text-slate-600 hover:text-brand-700 hover:bg-brand-50'}`}>
+            <NavLink to="/quotes" end className={({ isActive }) => `px-2 py-1 rounded ${isActive ? 'text-brand-700 font-semibold' : 'text-slate-600 hover:text-brand-700 hover:bg-brand-50'}`}>
               Quotes
             </NavLink>
             <NavLink to="/projects" className={({ isActive }) => `px-2 py-1 rounded ${isActive ? 'text-brand-700 font-semibold' : 'text-slate-600 hover:text-brand-700 hover:bg-brand-50'}`}>
@@ -139,7 +139,7 @@ export function Layout({ children }: { children: ReactNode }) {
         {openMobile && (
           <div className="md:hidden border-t bg-white px-3 py-2 space-y-1">
             {[
-              { to: '/', label: 'Quotes' },
+              { to: '/quotes', label: 'Quotes' },
               { to: '/projects', label: 'Projects' },
               { to: '/installations', label: 'Installations' },
               { to: '/invoices', label: 'Invoices' },

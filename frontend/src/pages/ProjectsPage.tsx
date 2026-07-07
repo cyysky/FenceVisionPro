@@ -53,7 +53,7 @@ export default function ProjectsPage() {
     <div className="min-h-full bg-slate-50">
       <header className="bg-white border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-          <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
+          <Link to="/quotes" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
           <h1 className="font-bold text-lg">End Customer Projects</h1>
           <span className="text-xs text-slate-500 hidden sm:inline">{user?.fullName || user?.email}</span>
           <Link to="/projects/new" className="ml-auto px-3 py-1.5 bg-brand-600 text-white rounded text-sm font-medium">

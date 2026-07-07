@@ -115,7 +115,7 @@ export default function DealersPage() {
   return (
     <div className="min-h-full">
       <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center flex-wrap gap-2">
-        <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">&larr; Back</Link>
+        <Link to="/quotes" className="text-sm text-slate-500 hover:text-brand-700">&larr; Back</Link>
         <h1 className="font-bold">Dealers</h1>
       </header>
       <main className="max-w-5xl mx-auto p-4 sm:p-6 space-y-6">

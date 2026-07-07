@@ -28,6 +28,7 @@ import PublicAiStepContact from './pages/PublicAiStepContact';
 import PublicAiResultPage from './pages/PublicAiResultPage';
 import LeadsListPage from './pages/LeadsListPage';
 import LeadDetailPage from './pages/LeadDetailPage';
+import LandingPage from './pages/LandingPage';
 import { Layout } from './components/Layout';
 
 export default function App() {
@@ -39,6 +40,11 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/approve/:id" element={<PublicApprovalPage />} />
 
+            {/* Public company landing page - served at "/" with no auth.
+                Authenticated users get auto-redirected to /quotes by
+                LandingPage itself (it calls useAuth and navigates). */}
+            <Route path="/" element={<LandingPage />} />
+
             {/* Public AI Yard Visualizer - 3-step wizard + result page. */}
             <Route path="/ai-generate" element={<PublicAiStepYard />} />
             <Route path="/ai-generate/photo" element={<PublicAiStepPhoto />} />
@@ -49,7 +55,7 @@ export default function App() {
             <Route path="/public/installation/:id/installer/:token" element={<PublicInstallerView />} />
             <Route path="/public/installation/:id/customer/:linkToken" element={<PublicCustomerView />} />
 
-            <Route path="/" element={<RequireAuth><Layout><DashboardPage /></Layout></RequireAuth>} />
+            <Route path="/quotes" element={<RequireAuth><Layout><DashboardPage /></Layout></RequireAuth>} />
             <Route path="/quotes/new" element={<RequireAuth><Layout><NewQuotePage /></Layout></RequireAuth>} />
             <Route path="/quotes/:id" element={<RequireAuth><Layout><QuoteDetailPage /></Layout></RequireAuth>} />
             <Route path="/projects" element={<RequireAuth><Layout><ProjectsPage /></Layout></RequireAuth>} />

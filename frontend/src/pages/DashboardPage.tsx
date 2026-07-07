@@ -94,7 +94,7 @@ export default function DashboardPage() {
         <section>
           <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">Quick links</h2>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <QuickLink to="/" label="Quotes" hint="Create and manage quotes" />
+            <QuickLink to="/quotes" label="Quotes" hint="Create and manage quotes" />
             <QuickLink to="/projects" label="Projects" hint="End-customer project workspace" />
             <QuickLink to="/installations" label="Installations" hint="On-site work, photos & sign-off" />
             <QuickLink to="/products" label="Products" hint="Catalog & pricing" />

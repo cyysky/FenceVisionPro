@@ -256,7 +256,7 @@ export default function QuoteDetailPage() {
         <div className="text-3xl">⚠️</div>
         <h1 className="text-lg font-bold mt-2">Quote unavailable</h1>
         <p className="text-sm text-slate-600 mt-1">{loadErr || 'Quote not found'}</p>
-        <Link to="/" className="mt-3 inline-block text-brand-700 underline text-sm">← Back to dashboard</Link>
+        <Link to="/quotes" className="mt-3 inline-block text-brand-700 underline text-sm">← Back to dashboard</Link>
       </div>
     </div>
   );
@@ -280,7 +280,7 @@ export default function QuoteDetailPage() {
   return (
     <div className="space-y-4 max-w-5xl">
       <div className="flex flex-wrap items-center gap-2">
-        <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
+        <Link to="/quotes" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
         <span className="font-mono text-sm text-slate-500">{quote.reference}</span>
         <StatusBadge status={quote.status} />
         <div className="ml-auto flex flex-wrap items-center gap-2">

@@ -10,7 +10,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (token && user) {
-      const to = (loc.state as any)?.from || '/';
+      const to = (loc.state as any)?.from || '/quotes';
       nav(to, { replace: true });
     }
   }, [token, user, loc.state, nav]);
@@ -35,7 +35,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
-      const to = (loc.state as any)?.from || '/';
+      const to = (loc.state as any)?.from || '/quotes';
       nav(to, { replace: true });
     } catch (e: any) {
       setErr(apiErrorMessage(e, 'Login failed'));

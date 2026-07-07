@@ -36,7 +36,7 @@ export default function ProductsPage() {
   return (
     <div className="min-h-full">
       <header className="bg-white border-b px-4 sm:px-6 py-3 flex items-center flex-wrap gap-2">
-        <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Back</Link>
+        <Link to="/quotes" className="text-sm text-slate-500 hover:text-brand-700">← Back</Link>
         <h1 className="font-bold">Products & prices</h1>
         <span className="ml-2 text-xs text-slate-500 hidden sm:inline">Your effective price per product (after any per-dealer override).</span>
       </header>

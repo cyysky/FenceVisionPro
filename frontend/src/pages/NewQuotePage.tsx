@@ -200,7 +200,7 @@ export default function NewQuotePage() {
     <div className="min-h-full bg-slate-50">
       <header className="bg-white border-b">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center gap-2">
-          <Link to="/" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
+          <Link to="/quotes" className="text-sm text-slate-500 hover:text-brand-700">← Dashboard</Link>
           <h1 className="font-bold text-lg">New quote</h1>
           {draftId && <span className="text-xs text-slate-500 ml-2">Auto-saved as draft</span>}
         </div>
