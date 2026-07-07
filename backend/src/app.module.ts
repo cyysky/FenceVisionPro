@@ -1,6 +1,7 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
@@ -18,6 +19,7 @@ import { RenderModule } from './render/render.module';
 import { StorageModule } from './storage/storage.module';
 import { AiModule } from './ai/ai.module';
 import { AssetsModule } from './assets/assets.module';
+import { PublicAiModule } from './public-ai/public-ai.module';
 import { LoginThrottleMiddleware } from './auth/login-throttle.middleware';
 
 const dataDir = process.env.DATA_DIR || join(process.cwd(), 'data');
@@ -26,6 +28,10 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ['.env'] }),
+    // Global throttle ceiling. Individual controllers apply their
+    // own @Throttle({...}) for finer limits (e.g. the public
+    // AI-generation submit endpoint uses 5/hour).
+    ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
     PrismaModule,
     AuthModule,
     DealersModule,
@@ -40,6 +46,7 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
     StorageModule,
     AiModule,
     AssetsModule,
+    PublicAiModule,
     ServeStaticModule.forRoot({
       rootPath: dataDir,
       serveRoot: '/static',

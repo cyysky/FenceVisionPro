@@ -214,8 +214,33 @@ export class AiService {
    *
    * Returns a normalised subset of FenceParamsDto fields. The model
    * is told to reply with a single JSON object so the result is
-   * trivially parseable.
+  * trivially parseable.
+  */
+  /**
+   * Like analysePhoto but takes an absolute filesystem path. Used
+   * by the public AI-generation flow: the customer's photo is
+   * saved under data/uploads/leads/<lead>/photo.<ext> before the
+   * background render kicks off, so we can read it back from disk
+   * without round-tripping through the storage helper.
+   *
+   * Internally just reads the file and delegates to analysePhoto
+   * with an imageDataUrl.
    */
+  async analysePhotoPath(absPath: string): Promise<{
+    style?: string;
+    color?: string;
+    heightFt?: number;
+    surroundings?: string;
+    notes?: string;
+    confidence?: number;
+    raw?: string;
+  }> {
+    const buf = await fs.readFile(absPath);
+    const mime = this.sniffMime(absPath);
+    const dataUrl = `data:${mime};base64,${buf.toString('base64')}`;
+    return this.analysePhoto({ imageDataUrl: dataUrl, mimeType: mime });
+  }
+
   async analysePhoto(params: {
     imageUrl?: string;       // a server-stored /static/uploads/... URL
     imageDataUrl?: string;   // OR a data:image/...;base64,... URL
