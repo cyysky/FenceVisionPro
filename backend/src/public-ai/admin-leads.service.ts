@@ -196,8 +196,8 @@ export class AdminLeadsService {
 
   /**
    * POST /admin/leads/:id/archive - soft-delete. Sets archivedAt
-   * + renderStatus=ARCHIVED. Reversible by an admin in a follow-up
-   * tool (out of scope here).
+   * + renderStatus=ARCHIVED. Reversible by an admin in a dedicated
+   * restore tool if / when one is added.
    */
   async archive(id: string, dealerId: string | null, isAdmin: boolean) {
     const lead = await this.prisma.publicLead.findUnique({ where: { id } });
