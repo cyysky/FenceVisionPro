@@ -20,9 +20,19 @@ import { SubmitLeadDto } from './dto/submit-lead.dto';
 
 /**
  * Static gallery metadata served by GET /public/ai-generation/config.
- * Six curated stock photos - three front-yard, three back-yard -
+ * Twelve curated house photos - six front-yard, six back-yard -
  * mirrored into data/gallery/ at startup so the static middleware
  * can serve them straight off /static/gallery/<id>.jpg.
+ *
+ * The 12 images are AI-generated yard exteriors (no fences blocking
+ * the view) - they give the public AI visualizer realistic "before"
+ * templates. The user picks one as input; the existing render-image
+ * pipeline then adds a fence on top.
+ *
+ * Labels are tuned to match what was actually generated (see
+ * /tmp/hermes-gen-gallery.py for prompts). The frontend shuffles the
+ * order on every page load, so tile #1 on screen today may be
+ * "Poolside" tomorrow.
  *
  * Style list source: read distinct `Design.style` values where
  * `isActive = true` from Prisma. If the table is empty (first-run
@@ -30,12 +40,26 @@ import { SubmitLeadDto } from './dto/submit-lead.dto';
  * returns zero options.
  */
 const GALLERY: Array<{ id: string; label: string; yardSide: PublicLeadYardSide; filename: string }> = [
-  { id: 'front1', label: 'Suburban front lawn',       yardSide: 'FRONT', filename: 'front1.jpg' },
-  { id: 'front2', label: 'Modern townhouse front',    yardSide: 'FRONT', filename: 'front2.jpg' },
-  { id: 'front3', label: 'Garden-style front',        yardSide: 'FRONT', filename: 'front3.jpg' },
-  { id: 'back1',  label: 'Poolside patio',            yardSide: 'BACK',  filename: 'back1.jpg' },
-  { id: 'back2',  label: 'Family lawn',               yardSide: 'BACK',  filename: 'back2.jpg' },
-  { id: 'back3',  label: 'Outdoor entertaining',      yardSide: 'BACK',  filename: 'back3.jpg' },
+  // 6 FRONT-YARD photos (AI-generated house exteriors)
+  { id: 'front1', label: 'Suburban front lawn',           yardSide: 'FRONT', filename: 'front1.jpg' },
+  { id: 'front2', label: 'Modern townhouse front',        yardSide: 'FRONT', filename: 'front2.jpg' },
+  { id: 'front3', label: 'Garden-style front',            yardSide: 'FRONT', filename: 'front3.jpg' },
+  { id: 'front4', label: 'Craftsman cottage with veranda', yardSide: 'FRONT', filename: 'front4.jpg' },
+  { id: 'front5', label: 'Spanish colonial revival',      yardSide: 'FRONT', filename: 'front5.jpg' },
+  { id: 'front6', label: 'Two-story family home',         yardSide: 'FRONT', filename: 'front6.jpg' },
+  { id: 'front7', label: 'Mid-century ranch',             yardSide: 'FRONT', filename: 'front7.jpg' },
+  { id: 'front8', label: 'English country cottage',       yardSide: 'FRONT', filename: 'front8.jpg' },
+  { id: 'front9', label: 'Minimalist contemporary',       yardSide: 'FRONT', filename: 'front9.jpg' },
+  // 6 BACK-YARD photos
+  { id: 'back1',  label: 'Poolside patio',                yardSide: 'BACK',  filename: 'back1.jpg' },
+  { id: 'back2',  label: 'Family lawn',                   yardSide: 'BACK',  filename: 'back2.jpg' },
+  { id: 'back3',  label: 'Outdoor entertaining',          yardSide: 'BACK',  filename: 'back3.jpg' },
+  { id: 'back4',  label: 'Backyard with pool and bar',    yardSide: 'BACK',  filename: 'back4.jpg' },
+  { id: 'back5',  label: 'Family lawn with treehouse',    yardSide: 'BACK',  filename: 'back5.jpg' },
+  { id: 'back6',  label: 'Zen garden retreat',            yardSide: 'BACK',  filename: 'back6.jpg' },
+  { id: 'back7',  label: 'Vegetable garden homestead',   yardSide: 'BACK',  filename: 'back7.jpg' },
+  { id: 'back8',  label: 'Desert courtyard',              yardSide: 'BACK',  filename: 'back8.jpg' },
+  { id: 'back9',  label: 'Family lawn with playset',      yardSide: 'BACK',  filename: 'back9.jpg' },
 ];
 
 const FALLBACK_STYLES = ['Privacy', 'Picket', 'Wrought Iron', 'Chain Link', 'Vinyl'];

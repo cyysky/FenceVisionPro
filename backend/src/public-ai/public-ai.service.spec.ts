@@ -47,11 +47,11 @@ describe('PublicAiService - getConfig', () => {
     svc = mod.get(PublicAiService);
   });
 
-  it('returns 6 gallery items (3 front, 3 back) and a deduped style list', async () => {
+  it('returns 18 gallery items (9 front, 9 back) and a deduped style list', async () => {
     const cfg = await svc.getConfig();
-    expect(cfg.gallery).toHaveLength(6);
-    expect(cfg.gallery.filter(g => g.yardSide === 'FRONT')).toHaveLength(3);
-    expect(cfg.gallery.filter(g => g.yardSide === 'BACK')).toHaveLength(3);
+    expect(cfg.gallery).toHaveLength(18);
+    expect(cfg.gallery.filter(g => g.yardSide === 'FRONT')).toHaveLength(9);
+    expect(cfg.gallery.filter(g => g.yardSide === 'BACK')).toHaveLength(9);
     expect(cfg.styles).toEqual(['Privacy', 'Picket']);
   });
 

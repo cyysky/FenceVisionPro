@@ -90,7 +90,22 @@ export function PublicPhotoInput({
 
   // Filter gallery items to the chosen yard side so the customer
   // doesn't see front-yard photos in the "back" flow.
-  const filteredGallery = gallery.filter(g => g.yardSide === yardSide);
+  // Re-shuffle on every (re)mount of the gallery tab so reloads feel
+  // fresh. We use a state key tied to yardSide + a fresh shuffle
+  // seed that's generated when the tab opens, so users never see the
+  // same order twice in a row.
+  const [shuffleSeed, setShuffleSeed] = useState(0);
+  const filteredGallery = gallery
+    .filter(g => g.yardSide === yardSide)
+    .map(g => ({ ...g, _sort: Math.random() }))
+    .sort((a, b) => a._sort - b._sort)
+    .map(({ _sort, ...g }) => g);
+
+  function openGallery() {
+    if (tab !== 'GALLERY') setTab('GALLERY');
+    // Bump the shuffle seed so re-opening shows a fresh order
+    setShuffleSeed(s => s + 1);
+  }
 
   return (
     <div>
@@ -104,7 +119,7 @@ export function PublicPhotoInput({
         </button>
         <button
           type="button"
-          onClick={() => setTab('GALLERY')}
+          onClick={openGallery}
           className={`px-4 py-2 border-l border-slate-200 ${tab === 'GALLERY' ? 'bg-brand-600 text-white' : 'bg-white text-slate-600 hover:bg-brand-50'}`}
         >
           Gallery ({yardSide === 'FRONT' ? 'Front' : 'Back'} yard)
@@ -139,28 +154,47 @@ export function PublicPhotoInput({
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {filteredGallery.length === 0 && (
-            <div className="col-span-full text-sm text-slate-500 py-6 text-center">Loading gallery...</div>
-          )}
-          {filteredGallery.map(g => {
-            const selected = value?.source === 'GALLERY' && value.galleryId === g.id;
-            return (
-              <button
-                type="button"
-                key={g.id}
-                onClick={() => onChange({ source: 'GALLERY', galleryId: g.id })}
-                className={`group relative rounded-lg overflow-hidden border-2 transition ${
-                  selected ? 'border-brand-600 ring-2 ring-brand-200' : 'border-slate-200 hover:border-brand-300'
-                }`}
-              >
-                <img src={g.url} alt={g.label} className="block w-full h-32 object-cover" />
-                <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition">
-                  {g.label}
-                </div>
-              </button>
-            );
-          })}
+        <div>
+          {/* Header: tile count + shuffle button. The order changes
+              on every page reload AND every time the user clicks
+              Shuffle, so they always see a fresh layout. */}
+          <div className="flex items-center justify-between mb-3 text-sm text-slate-600">
+            <div>
+              {filteredGallery.length} curated {yardSide === 'FRONT' ? 'front-yard' : 'back-yard'} photo{filteredGallery.length === 1 ? '' : 's'}
+            </div>
+            <button
+              type="button"
+              onClick={() => setShuffleSeed(s => s + 1)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border border-slate-200 bg-white hover:bg-brand-50 text-slate-700 transition"
+              title="Shuffle gallery order"
+            >
+              <span aria-hidden>🔀</span>
+              <span>Shuffle</span>
+            </button>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {filteredGallery.length === 0 && (
+              <div className="col-span-full text-sm text-slate-500 py-6 text-center">Loading gallery...</div>
+            )}
+            {filteredGallery.map(g => {
+              const selected = value?.source === 'GALLERY' && value.galleryId === g.id;
+              return (
+                <button
+                  type="button"
+                  key={`${g.id}-${shuffleSeed}`}
+                  onClick={() => onChange({ source: 'GALLERY', galleryId: g.id })}
+                  className={`group relative rounded-lg overflow-hidden border-2 transition ${
+                    selected ? 'border-brand-600 ring-2 ring-brand-200' : 'border-slate-200 hover:border-brand-300'
+                  }`}
+                >
+                  <img src={g.url} alt={g.label} className="block w-full h-32 sm:h-36 object-cover" />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-xs px-2 py-1 opacity-0 group-hover:opacity-100 transition">
+                    {g.label}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
