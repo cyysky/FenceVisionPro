@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { getConfig, GalleryItem } from '../lib/publicAi';
 
 export type PublicPhotoSource = 'UPLOADED' | 'GALLERY';
@@ -90,16 +90,29 @@ export function PublicPhotoInput({
 
   // Filter gallery items to the chosen yard side so the customer
   // doesn't see front-yard photos in the "back" flow.
-  // Re-shuffle on every (re)mount of the gallery tab so reloads feel
-  // fresh. We use a state key tied to yardSide + a fresh shuffle
-  // seed that's generated when the tab opens, so users never see the
-  // same order twice in a row.
+  //
+  // Re-shuffle happens ONLY when one of the dependency keys changes:
+  //   - yardSide: switching front<->back shows a fresh order on the
+  //     new side
+  //   - shuffleSeed: explicit "Shuffle" button click OR tab reopen
+  //   - gallery.length: fresh data from the config endpoint
+  //
+  // IMPORTANT: must use useMemo here, not compute on every render.
+  // Otherwise typing in the name/email/phone fields, clicking a tile,
+  // or any other state change would re-render the component and
+  // produce a new random order - making the gallery feel like it's
+  // shuffling while the user is trying to interact with it. Bug
+  // reported by user on 2026-07-07, fix verified via re-clicking the
+  // same tile in the browser.
   const [shuffleSeed, setShuffleSeed] = useState(0);
-  const filteredGallery = gallery
-    .filter(g => g.yardSide === yardSide)
-    .map(g => ({ ...g, _sort: Math.random() }))
-    .sort((a, b) => a._sort - b._sort)
-    .map(({ _sort, ...g }) => g);
+  const filteredGallery = useMemo(
+    () => gallery
+      .filter(g => g.yardSide === yardSide)
+      .map(g => ({ ...g, _sort: Math.random() }))
+      .sort((a, b) => a._sort - b._sort)
+      .map(({ _sort, ...g }) => g),
+    [yardSide, gallery.length, shuffleSeed],
+  );
 
   function openGallery() {
     if (tab !== 'GALLERY') setTab('GALLERY');
