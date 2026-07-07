@@ -387,6 +387,36 @@ The Vite dev server proxies `/api` and `/static` to `http://localhost:12888`.
 - `Quote` – customer info, fence segments (in meters), selected design, totals, status
 - `QuoteLineItem` – derived from segments + product pricing
 
+## Public AI Yard Visualizer
+
+A public, unauthenticated page (`/ai-generate`) that lets any visitor upload
+(or pick from a curated gallery) a yard photo, choose front- or back-yard,
+and get a Yardex-rendered fence preview powered by the existing `AiService`
+(`AI_IMAGE_MODEL`, `AI_VISION_MODEL` — no new provider integration). The
+submission creates a `PublicLead` row that sales reps can pick up from the
+authenticated `/leads` page and convert into a draft `Quote` with one click.
+
+### Endpoints (all under `/api`)
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET  | `/public/ai-generation/config` | none | Gallery photos + style list |
+| POST | `/public/ai-generation`       | none, rate-limited (5 / IP / hr) | Multipart (upload) OR JSON (gallery) |
+| GET  | `/public/ai-generation/:id/status` | none | Polled by the result page |
+| GET  | `/public/ai-generation/:id/result` | none | Full public-safe lead record |
+| GET  | `/admin/leads`                | JWT  | Paginated list, status / date filters |
+| GET  | `/admin/leads/:id`            | JWT  | Full lead detail (incl. notes) |
+| POST | `/admin/leads/:id/convert-to-quote` | JWT | Creates a `DRAFT` `Quote` and links it |
+| POST | `/admin/leads/:id/mark-contacted`   | JWT | Sets `contactedAt`, optional notes |
+| POST | `/admin/leads/:id/archive`          | JWT | Soft-archive (`archivedAt`) |
+
+### Gallery assets
+
+Six curated stock photos live under `data/gallery/` and are served from
+`/static/gallery/<id>.jpg`. They are git-ignored (the directory is rebuilt
+on first run from a tiny `sharp`-generated placeholder so the page always
+returns 6 items in fresh environments).
+
 ## Roadmap
 - [ ] Replace canvas drawing with auto-detect via a CV/ML model
 - [ ] Replace 2D preview with a 3D / AI renderer
