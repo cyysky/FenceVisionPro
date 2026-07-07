@@ -60,6 +60,7 @@ model User {
 
   quotesCreated    Quote[]           @relation("CreatedBy")
   projectDocuments ProjectDocument[] @relation("ProjectDocumentUploader")
+  leadsContacted   PublicLead[]
 
   @@index([dealerId])
 }
@@ -201,6 +202,7 @@ model Quote {
   project      Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   installation Installation?
   invoices     Invoice[]
+  publicLeads  PublicLead[]
 
   @@index([dealerId])
   @@index([status])
@@ -228,6 +230,71 @@ model QuoteLineItem {
 enum ProjectType {
   RESIDENTIAL
   COMMERCIAL
+}
+
+enum PublicLeadYardSide {
+  FRONT
+  BACK
+}
+
+enum PublicLeadPhotoSource {
+  UPLOADED
+  GALLERY
+}
+
+enum PublicLeadStatus {
+  PENDING
+  READY
+  CONTACTED
+  CONVERTED
+  ARCHIVED
+  FAILED
+}
+
+model PublicLead {
+  id              String                  @id @default(cuid())
+
+  // Customer contact - at least one of these is required (enforced in service).
+  email           String?
+  phone           String?
+  firstName       String?
+
+  // Submission metadata
+  yardSide        PublicLeadYardSide
+  photoSource     PublicLeadPhotoSource
+
+  // The customer's input image (upload OR gallery selection).
+  // For UPLOADED: the file we saved from multipart.
+  // For GALLERY:  the gallery asset id (no file copy needed).
+  inputPhotoPath  String
+  inputGalleryId  String?
+
+  // The chosen design style id (Privacy / Picket / Wrought Iron / etc.)
+  designStyle     String?
+
+  // AI render output
+  renderStatus    PublicLeadStatus        @default(PENDING)
+  renderUrl       String?
+  renderPrompt    String?
+  renderModelUsed String?
+  renderError     String?
+  generatedAt     DateTime?
+
+  // Sales-pipeline
+  contactedAt     DateTime?
+  contactedById   String?
+  contactedBy     User?                   @relation(fields: [contactedById], references: [id])
+  notes           String?
+  convertedQuoteId String?
+  convertedQuote   Quote?                 @relation(fields: [convertedQuoteId], references: [id])
+  archivedAt      DateTime?
+
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([renderStatus])
+  @@index([createdAt])
+  @@index([contactedById])
 }
 
 enum InstallScope {
