@@ -22,7 +22,9 @@ import InvoicesPage from './pages/InvoicesPage';
 import InvoiceDetailPage from './pages/InvoiceDetailPage';
 import PublicInstallerView from './pages/PublicInstallerView';
 import PublicCustomerView from './pages/PublicCustomerView';
-import PublicAiGeneratePage from './pages/PublicAiGeneratePage';
+import PublicAiStepYard from './pages/PublicAiStepYard';
+import PublicAiStepPhoto from './pages/PublicAiStepPhoto';
+import PublicAiStepContact from './pages/PublicAiStepContact';
 import PublicAiResultPage from './pages/PublicAiResultPage';
 import LeadsListPage from './pages/LeadsListPage';
 import LeadDetailPage from './pages/LeadDetailPage';
@@ -37,8 +39,10 @@ export default function App() {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/approve/:id" element={<PublicApprovalPage />} />
 
-            {/* Public AI Yard Visualizer - same unauthenticated shell as /approve/:id. */}
-            <Route path="/ai-generate" element={<PublicAiGeneratePage />} />
+            {/* Public AI Yard Visualizer - 3-step wizard + result page. */}
+            <Route path="/ai-generate" element={<PublicAiStepYard />} />
+            <Route path="/ai-generate/photo" element={<PublicAiStepPhoto />} />
+            <Route path="/ai-generate/contact" element={<PublicAiStepContact />} />
             <Route path="/ai-generate/result/:id" element={<PublicAiResultPage />} />
 
             {/* Public installation views - NOT wrapped in RequireAuth. */}
