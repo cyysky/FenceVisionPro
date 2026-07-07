@@ -1,7 +1,8 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ServeStaticModule } from '@nestjs/serve-static';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 
@@ -57,6 +58,13 @@ if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
       serveStaticOptions: { fallthrough: true },
     }),
   ],
+  // The ThrottlerGuard is what actually enforces @Throttle({...})
+  // decorators on controllers. Without registering it as APP_GUARD,
+  // the decorators compile fine but silently do nothing at runtime
+  // (the package doesn't auto-register). Verified live via hammer
+  // test on 2026-07-07: 10 rapid submits all returned 201 with no
+  // X-RateLimit-* headers before this guard was added.
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
