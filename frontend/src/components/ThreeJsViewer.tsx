@@ -57,8 +57,44 @@ function hoistHostVars(code: string): string {
   return out;
 }
 
+/**
+ * Most LLM-generated scenes wrap everything in one big IIFE:
+ *
+ *   (function () {
+ *     const camera = ...;
+ *     const renderer = ...;
+ *     ...
+ *   })();
+ *
+ * In that shape the line-based hoisting above can't see the
+ * locals, so the auto-attach IIFE below would never find the
+ * camera/renderer and no OrbitControls would be created. We
+ * append guarded assignments right before the IIFE closes so
+ * the wrapper can pick them up. Each name is individually
+ * guarded because some (e.g. `controls`) may only exist inside
+ * a nested block and simply won't be found there.
+ */
+function exposeIifeGlobals(code: string): string {
+  const tail = code.match(/\}\)\(([^)]*)\);?\s*$/);
+  if (!tail) return code;
+  const stmts = HOST_HOISTED_VARS.map(n => `window.${n} = ${n};`).join('\n');
+  return code.replace(
+    /\}\)\(([^)]*)\);?\s*$/,
+    `try {\n${stmts}\n} catch (err) { /* name not in scope */ }\n})($1);`,
+  );
+}
+
+/**
+ * Prepare LLM-generated scene code for the sandboxed iframe:
+ * hoist top-level declarations, then expose IIFE-wrapped locals
+ * so the auto-attach controls can find them.
+ */
+export function prepareCodeForIframe(code: string): string {
+  return exposeIifeGlobals(hoistHostVars(code));
+}
+
 function buildHtml(code: string, handshake: string): string {
-  const hoisted = hoistHostVars(code);
+  const prepared = prepareCodeForIframe(code);
   return `<!doctype html><html><head><meta charset="utf-8"><style>
 html,body{margin:0;height:100%;background:#0f172a;overflow:hidden;font-family:sans-serif;color:#cbd5e1}
 canvas{display:block}
@@ -67,7 +103,10 @@ canvas{display:block}
 </style></head><body>
 <div id="err"></div>
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
-<script src="https://unpkg.com/three@0.160.0/examples/js/controls/OrbitControls.js"></script>
+<!-- three r160 removed the examples/js directory, so the classic
+     OrbitControls script 404s there; r147 still ships it and its
+     class works against the r160 core (THREE.OrbitControls). -->
+<script src="https://unpkg.com/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script>
 window.addEventListener('error', function(e){
   var el = document.getElementById('err');
@@ -131,7 +170,7 @@ function applyViewerCommand(cmd) {
   }
 }
 try {
-${hoisted}
+${prepared}
 } catch (e) {
   var el = document.getElementById('err');
   el.textContent = (e && e.stack) || String(e);
@@ -152,11 +191,18 @@ ${hoisted}
 (function() {
   function attach() {
     try {
-      var cam = window.camera;
-      var ren = window.renderer;
+      function read(name) {
+        // window.* first (IIFE-exposed or hoisted), then a
+        // same-script top-level let/const binding.
+        try { if (typeof window[name] !== 'undefined') return window[name]; } catch (e) {}
+        try { if (typeof eval(name) !== 'undefined') return eval(name); } catch (e) {}
+        return undefined;
+      }
+      var cam = read('camera');
+      var ren = read('renderer');
       if (!cam || !ren || !window.THREE || !window.THREE.OrbitControls) return false;
       if (window.__fvpControls) return true;
-      var c = window.controls || new window.THREE.OrbitControls(cam, ren.domElement);
+      var c = read('controls') || new window.THREE.OrbitControls(cam, ren.domElement);
       c.enableDamping = true;
       c.dampingFactor = 0.08;
       // Aim the controls at the centre of the scene if we can
