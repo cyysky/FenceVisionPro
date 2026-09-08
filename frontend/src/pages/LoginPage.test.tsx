@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import type { ReactNode } from 'react';
 import LoginPage from './LoginPage';
 
 const authMock = vi.hoisted(() => ({
@@ -21,6 +22,9 @@ vi.mock('../lib/auth', () => ({
   }),
 }));
 vi.mock('react-router-dom', () => ({
+  Link: ({ to, children, ...props }: { to: string; children: ReactNode; [k: string]: any }) => (
+    <a href={typeof to === 'string' ? to : '#'} {...props}>{children}</a>
+  ),
   useNavigate: () => navMock,
   useLocation: () => locationMock,
 }));
@@ -33,6 +37,13 @@ describe('LoginPage', () => {
     authMock.token = null;
     navMock.mockReset();
     locationMock.state = null;
+  });
+
+  it('links back to the Yardex home page', () => {
+    render(<LoginPage />);
+    expect(screen.getByRole('link', { name: 'Y' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '← Back to Yardex home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Yardex' })).toHaveAttribute('href', '/');
   });
 
   it('rejects an invalid email before calling the API', async () => {
@@ -87,12 +98,13 @@ describe('LoginPage', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).not.toBeDisabled();
   });
 
-  it('fills in the demo account on click', async () => {
+  it('fills in only the demo email on click and never shows a demo password', async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
+    expect(screen.queryByText('owner1234')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'owner@yardex.local' }));
     expect(screen.getByLabelText('Email')).toHaveValue('owner@yardex.local');
-    expect(screen.getByLabelText('Password')).toHaveValue('owner1234');
+    expect(screen.getByLabelText('Password')).toHaveValue('');
   });
 
   it('toggles password visibility', async () => {
