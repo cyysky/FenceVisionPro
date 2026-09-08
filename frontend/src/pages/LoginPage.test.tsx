@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ReactNode } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import LoginPage from './LoginPage';
 
 const authMock = vi.hoisted(() => ({
-  login: vi.fn(),
+  demoLogin: vi.fn(),
   logout: vi.fn(),
   user: null as { id: string; email: string; fullName: string; role: string; dealerId: string | null } | null,
   token: null as string | null,
@@ -14,94 +15,72 @@ const locationMock = vi.hoisted(() => ({ state: null as any }));
 
 vi.mock('../lib/auth', () => ({
   useAuth: () => ({
-    login: authMock.login,
+    demoLogin: authMock.demoLogin,
     logout: authMock.logout,
     user: authMock.user,
     token: authMock.token,
   }),
 }));
 vi.mock('react-router-dom', () => ({
+  Link: ({ to, children, ...props }: { to: string; children: ReactNode; [k: string]: any }) => (
+    <a href={typeof to === 'string' ? to : '#'} {...props}>{children}</a>
+  ),
   useNavigate: () => navMock,
   useLocation: () => locationMock,
 }));
 
 describe('LoginPage', () => {
   beforeEach(() => {
-    authMock.login.mockReset();
-    authMock.login.mockResolvedValue(undefined);
+    authMock.demoLogin.mockReset();
+    authMock.demoLogin.mockResolvedValue(undefined);
     authMock.user = null;
     authMock.token = null;
     navMock.mockReset();
     locationMock.state = null;
   });
 
-  it('rejects an invalid email before calling the API', async () => {
-    const user = userEvent.setup();
+  it('links back to the Yardex home page', () => {
     render(<LoginPage />);
-    await user.type(screen.getByLabelText('Email'), 'not-an-email');
-    await user.type(screen.getByLabelText('Password'), 'correct-horse');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Please enter a valid email address');
-    expect(authMock.login).not.toHaveBeenCalled();
+    expect(screen.getByRole('link', { name: 'Y' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: '← Back to Yardex home' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Yardex' })).toHaveAttribute('href', '/');
   });
 
-  it('rejects short passwords', async () => {
-    const user = userEvent.setup();
+  it('has no password field', () => {
     render(<LoginPage />);
-    await user.type(screen.getByLabelText('Email'), 'owner@yardex.local');
-    await user.type(screen.getByLabelText('Password'), '123');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(screen.getByRole('alert')).toHaveTextContent('Password must be at least 6 characters');
-    expect(authMock.login).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText(/password/i)).toBeNull();
   });
 
-  it('logs in and navigates to the default route', async () => {
+  it('signs into the owner demo account without a password', async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
-    await user.type(screen.getByLabelText('Email'), 'admin@yardex.local');
-    await user.type(screen.getByLabelText('Password'), 'admin1234');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(authMock.login).toHaveBeenCalledWith('admin@yardex.local', 'admin1234');
+    await user.click(screen.getByRole('button', { name: /owner@yardex\.local/i }));
+    expect(authMock.demoLogin).toHaveBeenCalledWith('owner@yardex.local');
     expect(navMock).toHaveBeenCalledWith('/quotes', { replace: true });
   });
 
-  it('navigates to the location state after login', async () => {
-    locationMock.state = { from: '/projects' };
-    authMock.login.mockResolvedValue(undefined);
+  it('signs into the admin demo account without a password', async () => {
     const user = userEvent.setup();
     render(<LoginPage />);
-    await user.type(screen.getByLabelText('Email'), 'a@b.co');
-    await user.type(screen.getByLabelText('Password'), 'password1');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
+    await user.click(screen.getByRole('button', { name: /admin@yardex\.local/i }));
+    expect(authMock.demoLogin).toHaveBeenCalledWith('admin@yardex.local');
+    expect(navMock).toHaveBeenCalledWith('/quotes', { replace: true });
+  });
+
+  it('navigates to the location state after demo login', async () => {
+    locationMock.state = { from: '/projects' };
+    const user = userEvent.setup();
+    render(<LoginPage />);
+    await user.click(screen.getByRole('button', { name: /owner@yardex\.local/i }));
     expect(navMock).toHaveBeenCalledWith('/projects', { replace: true });
   });
 
-  it('shows the API error message when login fails', async () => {
-    authMock.login.mockRejectedValue({ response: { data: { message: ['Bad credentials'] } } });
+  it('shows the API error message when demo login fails', async () => {
+    authMock.demoLogin.mockRejectedValue({ response: { data: { message: ['Invalid demo account'] } } });
     const user = userEvent.setup();
     render(<LoginPage />);
-    await user.type(screen.getByLabelText('Email'), 'a@b.co');
-    await user.type(screen.getByLabelText('Password'), 'wrong-pass');
-    await user.click(screen.getByRole('button', { name: 'Sign in' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Bad credentials');
-    expect(screen.getByRole('button', { name: 'Sign in' })).not.toBeDisabled();
-  });
-
-  it('fills in the demo account on click', async () => {
-    const user = userEvent.setup();
-    render(<LoginPage />);
-    await user.click(screen.getByRole('button', { name: 'owner@yardex.local' }));
-    expect(screen.getByLabelText('Email')).toHaveValue('owner@yardex.local');
-    expect(screen.getByLabelText('Password')).toHaveValue('owner1234');
-  });
-
-  it('toggles password visibility', async () => {
-    const user = userEvent.setup();
-    render(<LoginPage />);
-    const pw = screen.getByLabelText('Password');
-    expect(pw).toHaveAttribute('type', 'password');
-    await user.click(screen.getByRole('button', { name: 'Show password' }));
-    expect(screen.getByLabelText('Password')).toHaveAttribute('type', 'text');
+    await user.click(screen.getByRole('button', { name: /owner@yardex\.local/i }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid demo account');
   });
 
   it('bounces an already-authenticated user to /quotes', () => {

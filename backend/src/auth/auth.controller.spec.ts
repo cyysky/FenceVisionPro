@@ -27,6 +27,7 @@ describe('AuthController', () => {
   beforeEach(async () => {
     auth = {
       login: jest.fn(),
+      demoLogin: jest.fn(),
       hashPassword: jest.fn().mockResolvedValue('new-hash'),
     };
     prisma = {
@@ -68,6 +69,15 @@ describe('AuthController', () => {
     it('tolerates a request that bypassed the middleware (no hook)', async () => {
       auth.login.mockResolvedValue({ accessToken: 't', user: {} });
       const out = await ctrl.login({ email: 'a@b.co', password: 'secret1' } as any, {});
+      expect(out.accessToken).toBe('t');
+    });
+  });
+
+  describe('demoLogin', () => {
+    it('delegates to the service and returns the session', async () => {
+      auth.demoLogin.mockResolvedValue({ accessToken: 't', user: { email: 'owner@yardex.local' } });
+      const out = await ctrl.demoLogin({ email: 'owner@yardex.local' } as any);
+      expect(auth.demoLogin).toHaveBeenCalledWith('owner@yardex.local');
       expect(out.accessToken).toBe('t');
     });
   });

@@ -115,4 +115,15 @@ describe('AuthProvider', () => {
     expect(result.current.user).toBeNull();
     expect(result.current.token).toBeNull();
   });
+
+  it('demoLogin posts only an email to /auth/demo-login', async () => {
+    hoisted.api.post.mockResolvedValue({ data: { accessToken: 't3', user: serverUser } });
+    const { result } = renderHook(() => useAuth(), { wrapper });
+
+    await act(async () => { await result.current.demoLogin('owner@yardex.local'); });
+    expect(hoisted.api.post).toHaveBeenCalledWith('/auth/demo-login', { email: 'owner@yardex.local' });
+    expect(hoisted.saveAuth).toHaveBeenCalledWith('t3', serverUser);
+    expect(result.current.user).toEqual(serverUser);
+    expect(result.current.token).toBe('t3');
+  });
 });
