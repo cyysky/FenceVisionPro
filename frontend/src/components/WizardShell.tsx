@@ -42,9 +42,12 @@ export function WizardShell({
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white flex flex-col">
       <header className="max-w-4xl mx-auto w-full px-4 py-6 flex items-center gap-3">
-        <Link to="/ai-generate" className="w-8 h-8 rounded bg-brand-600 grid place-items-center text-white font-bold">Y</Link>
+        <Link to="/" title="Back to Yardex home" className="w-8 h-8 rounded bg-brand-600 grid place-items-center text-white font-bold hover:bg-brand-700 transition">Y</Link>
         <Link to="/ai-generate" className="font-bold text-lg">Yardex AI Yard Visualizer</Link>
-        <div className="ml-auto text-xs text-slate-500 italic hidden sm:block">Design To Inspire, Engineered to Endure.</div>
+        <div className="ml-auto flex items-center gap-4">
+          <Link to="/" className="text-sm text-slate-600 hover:text-brand-700 transition">← Back to Yardex home</Link>
+          <span className="hidden md:block text-xs text-slate-500 italic">Design To Inspire, Engineered to Endure.</span>
+        </div>
       </header>
 
       <WizardStepper steps={steps} currentPath={currentPath} />

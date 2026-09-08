@@ -67,8 +67,9 @@ export default function PublicAiResultPage() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-brand-50 to-white">
       <header className="max-w-4xl mx-auto px-4 py-6 flex items-center gap-3">
-        <div className="w-8 h-8 rounded bg-brand-600 grid place-items-center text-white font-bold">Y</div>
-        <div className="font-bold text-lg">Yardex AI Yard Visualizer</div>
+        <Link to="/" title="Back to Yardex home" className="w-8 h-8 rounded bg-brand-600 grid place-items-center text-white font-bold hover:bg-brand-700 transition">Y</Link>
+        <Link to="/ai-generate" className="font-bold text-lg">Yardex AI Yard Visualizer</Link>
+        <Link to="/" className="ml-auto text-sm text-slate-600 hover:text-brand-700 transition">← Back to Yardex home</Link>
       </header>
 
       <main className="max-w-4xl mx-auto px-4 pb-16 space-y-6">
