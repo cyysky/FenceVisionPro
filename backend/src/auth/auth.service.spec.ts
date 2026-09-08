@@ -60,32 +60,4 @@ describe('AuthService - login and isActive', () => {
     await svc.login('A@X.COM', 'rightpw');
     expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'a@x.com' } });
   });
-
-  describe('demoLogin', () => {
-    const demoUser = {
-      id: 'u1', email: 'owner@yardex.local', fullName: 'Yardex Owner',
-      role: 'DEALER_OWNER', dealerId: 'w1', isActive: true,
-      passwordHash: 'unused',
-    };
-
-    it('issues a token for an active demo account without a password', async () => {
-      prisma.user.findUnique.mockResolvedValue(demoUser);
-      const out = await svc.demoLogin('owner@yardex.local');
-      expect(out.accessToken).toBe('TOKEN');
-      expect(out.user.email).toBe('owner@yardex.local');
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({ where: { email: 'owner@yardex.local' } });
-    });
-
-    it('rejects non-demo accounts', async () => {
-      prisma.user.findUnique.mockResolvedValue({ ...demoUser, email: 'real@customer.com' });
-      await expect(svc.demoLogin('real@customer.com')).rejects.toThrow(/Invalid demo account/);
-    });
-
-    it('rejects unknown and inactive demo accounts', async () => {
-      prisma.user.findUnique.mockResolvedValue(null);
-      await expect(svc.demoLogin('nobody@yardex.local')).rejects.toThrow(/Invalid demo account/);
-      prisma.user.findUnique.mockResolvedValue({ ...demoUser, isActive: false });
-      await expect(svc.demoLogin('owner@yardex.local')).rejects.toThrow(/Invalid demo account/);
-    });
-  });
 });

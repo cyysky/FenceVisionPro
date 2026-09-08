@@ -2,13 +2,7 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { api, clearAuth, loadAuth, saveAuth } from './api';
 
 interface User { id: string; email: string; fullName: string; role: string; dealerId: string | null; }
-interface AuthCtx {
-  user: User | null;
-  token: string | null;
-  login: (email: string, password: string) => Promise<void>;
-  demoLogin: (email: string) => Promise<void>;
-  logout: () => void;
-}
+interface AuthCtx { user: User | null; token: string | null; login: (email: string, password: string) => Promise<void>; logout: () => void; }
 
 const Ctx = createContext<AuthCtx>(null as any);
 export const useAuth = () => useContext(Ctx);
@@ -84,12 +78,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     saveAuth(data.accessToken, data.user);
     setAuth({ token: data.accessToken, user: data.user });
   }
-  async function demoLogin(email: string) {
-    const { data } = await api.post('/auth/demo-login', { email });
-    saveAuth(data.accessToken, data.user);
-    setAuth({ token: data.accessToken, user: data.user });
-  }
   function logout() { clearAuth(); setAuth({ token: null, user: null }); }
 
-  return <Ctx.Provider value={{ user: auth.user, token: auth.token, login, demoLogin, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user: auth.user, token: auth.token, login, logout }}>{children}</Ctx.Provider>;
 }

@@ -12,10 +12,6 @@ class LoginDto {
   @IsString() @MinLength(6) password: string;
 }
 
-class DemoLoginDto {
-  @IsEmail() email: string;
-}
-
 class ChangePasswordDto {
   @IsString() @MinLength(6) oldPassword: string;
   @IsString() @MinLength(8) newPassword: string;
@@ -39,16 +35,6 @@ export class AuthController {
       recordFailureFromReq(req);
       throw e;
     }
-  }
-
-  /**
-   * Passwordless sign-in for the public demo accounts shown on the
-   * /login page. No password is involved, so there's nothing to
-   * brute-force and the login throttle doesn't apply here.
-   */
-  @Post('demo-login')
-  async demoLogin(@Body() dto: DemoLoginDto) {
-    return this.auth.demoLogin(dto.email);
   }
 
   @UseGuards(AuthGuard('jwt'))
