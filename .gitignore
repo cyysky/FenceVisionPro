@@ -36,6 +36,7 @@ data/renders/*
 data/pdfs/*
 data/signatures/*
 data/gallery/*
+!data/gallery/*.jpg
 !data/overlays/
 !data/overlays/*.png
 .hermes/

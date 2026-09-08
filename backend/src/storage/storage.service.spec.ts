@@ -6,13 +6,19 @@ import { join } from 'path';
 describe('StorageService - file extensions', () => {
   let svc: StorageService;
   let tmp: string;
+  let prevDataDir: string | undefined;
 
   beforeEach(() => {
+    prevDataDir = process.env.DATA_DIR;
     tmp = mkdtempSync(join(tmpdir(), 'fvp-storage-'));
     process.env.DATA_DIR = tmp;
     svc = new (require('./storage.service').StorageService)();
   });
-  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+    if (prevDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = prevDataDir;
+  });
 
   async function save(name: string, mime?: string) {
     return svc.saveBuffer('uploads', name, Buffer.from('hello'), mime);
@@ -45,13 +51,19 @@ describe('StorageService - file extensions', () => {
 describe('StorageService - saveDataUrl (3D snapshot upload)', () => {
   let svc: StorageService;
   let tmp: string;
+  let prevDataDir: string | undefined;
 
   beforeEach(() => {
+    prevDataDir = process.env.DATA_DIR;
     tmp = mkdtempSync(join(tmpdir(), 'fvp-snap-'));
     process.env.DATA_DIR = tmp;
     svc = new (require('./storage.service').StorageService)();
   });
-  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+    if (prevDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = prevDataDir;
+  });
 
   // 1x1 transparent PNG
   const TINY_PNG_DATAURL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNgYAAAAAMAASsJTYQAAAAASUVORK5CYII=';
@@ -80,13 +92,19 @@ describe('StorageService - saveDataUrl (3D snapshot upload)', () => {
 describe('StorageService - writePublicStream (Step 1: customer-shareable bucket)', () => {
   let svc: any;
   let tmp: string;
+  let prevDataDir: string | undefined;
 
   beforeEach(() => {
+    prevDataDir = process.env.DATA_DIR;
     tmp = mkdtempSync(join(tmpdir(), 'fvp-pub-'));
     process.env.DATA_DIR = tmp;
     svc = new (require('./storage.service').StorageService)();
   });
-  afterEach(() => rmSync(tmp, { recursive: true, force: true }));
+  afterEach(() => {
+    rmSync(tmp, { recursive: true, force: true });
+    if (prevDataDir === undefined) delete process.env.DATA_DIR;
+    else process.env.DATA_DIR = prevDataDir;
+  });
 
   it('writes a file under <DATA_DIR>/public/<subdir>/', async () => {
     const { absPath, relPath, stream } = await svc.writePublicStream('pdfs', 'quote-abc.pdf');

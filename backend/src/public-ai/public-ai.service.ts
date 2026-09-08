@@ -20,19 +20,17 @@ import { SubmitLeadDto } from './dto/submit-lead.dto';
 
 /**
  * Static gallery metadata served by GET /public/ai-generation/config.
- * Twelve curated house photos - six front-yard, six back-yard -
- * mirrored into data/gallery/ at startup so the static middleware
- * can serve them straight off /static/gallery/<id>.jpg.
+ * Eighteen curated house photos - nine front-yard, nine back-yard -
+ * committed under data/gallery/ so the static middleware can serve
+ * them straight off /static/gallery/<id>.jpg.
  *
- * The 12 images are AI-generated yard exteriors (no fences blocking
+ * The 18 images are AI-generated yard exteriors (no fences blocking
  * the view) - they give the public AI visualizer realistic "before"
  * templates. The user picks one as input; the existing render-image
  * pipeline then adds a fence on top.
  *
- * Labels are tuned to match what was actually generated (see
- * /tmp/hermes-gen-gallery.py for prompts). The frontend shuffles the
- * order on every page load, so tile #1 on screen today may be
- * "Poolside" tomorrow.
+ * The frontend shuffles the order on every page load, so tile #1 on
+ * screen today may be "Poolside" tomorrow.
  *
  * Style list source: read distinct `Design.style` values where
  * `isActive = true` from Prisma. If the table is empty (first-run

@@ -165,17 +165,17 @@ power two extra visualisation features. The credentials live in
 | `AI_ENABLED` | `true` | Master switch |
 | `AI_BASE_URL` | (empty) | OpenAI-compatible base URL (e.g. `http://host:port/v1`) |
 | `AI_API_KEY` | (empty) | Bearer token for the AI service |
-| `AI_IMAGE_MODEL` | `z-image-turbo` | Model for `/ai/render-image` (image service still being provisioned) |
+| `AI_IMAGE_MODEL` | `z-image-turbo` | Image model for `/ai/render-image` and the public gallery (via `/images/generations`) |
 | `AI_CODE_MODEL` | `deepseek-v4-flash` | Model for `/ai/generate-3d` |
 | `AI_VISION_MODEL` | `MiniMax-M3` | Model for `/ai/analyse-photo` / `/ai/analyse-photo-url` |
 | `AI_IMAGE_SIZE` | `1024x1024` | Output size for image gen |
 | `AI_IMAGE_STEPS` | `9` | Inference steps for image gen |
 
-> Status: `z-image-turbo` is still being set up by the platform team. Code
-> generation (`deepseek-v4-flash`) and photo analysis (`MiniMax-M3`) are live;
-> `/ai/render-image` will only succeed once the image endpoint is ready. When
-> it goes live, update `AI_BASE_URL` / `AI_API_KEY` / `AI_IMAGE_MODEL` in
-> `backend/.env` and run `docker compose restart backend`.
+> Status: `AI_BASE_URL` points at the LiteLLM proxy (`router.fmcv.my`), which
+> routes `z-image-turbo` to the platform SGLang instance. Image responses are
+> inline base64 (no `response_format` parameter needed), so `/ai/render-image`
+> and the public visualizer work out of the box. Code generation
+> (`deepseek-v4-flash`) and photo analysis (`MiniMax-M3`) are also live.
 
 ### Endpoints
 
@@ -454,10 +454,10 @@ authenticated `/leads` page and convert into a draft `Quote` with one click.
 
 ### Gallery assets
 
-Six curated stock photos live under `data/gallery/` and are served from
-`/static/gallery/<id>.jpg`. They are git-ignored (the directory is rebuilt
-on first run from a tiny `sharp`-generated placeholder so the page always
-returns 6 items in fresh environments).
+Eighteen AI-generated yard photos (`front1.jpg`-`front9.jpg`, `back1.jpg`-
+`back9.jpg`) live under `data/gallery/` and are committed to the repo. They are
+served from `/static/gallery/<id>.jpg`; the public visualizer ships an
+unobstructed "before" photo which the render pipeline then fences on top.
 
 ## Roadmap
 - [ ] Replace canvas drawing with auto-detect via a CV/ML model
