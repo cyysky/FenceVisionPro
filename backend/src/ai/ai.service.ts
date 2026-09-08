@@ -81,7 +81,6 @@ export class AiService {
         const r = await (client.images.generate as any)({
           model: this.imageModel,
           prompt,
-          response_format: 'b64_json',
           size: this.imageSize,
           extra_body: { guidance_scale: 0, num_inference_steps: this.imageSteps },
         });
@@ -92,7 +91,7 @@ export class AiService {
           return await this.storage.saveBuffer('renders', `ai-${uuid()}.png`, bytes);
         }
         if (d.url) {
-          // Some servers ignore response_format and return a URL
+          // Some servers return a URL instead of inline b64_json
           const fetched = await fetch(d.url, { headers: { Authorization: `Bearer ${this.config.get('AI_API_KEY')}` } });
           if (!fetched.ok) throw new Error(`download failed: ${fetched.status}`);
           const bytes = Buffer.from(await fetched.arrayBuffer());

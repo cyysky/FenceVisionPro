@@ -84,10 +84,10 @@ describe('AiService - generateFenceImage', () => {
     const arg = generate.mock.calls[0][0];
     expect(arg).toMatchObject({
       model: 'img-model',
-      response_format: 'b64_json',
       size: '512x512',
       extra_body: { guidance_scale: 0, num_inference_steps: 9 },
     });
+    expect(arg.response_format).toBeUndefined();
     expect(arg.prompt).toContain('4-foot tall white classic residential picket fence');
     expect(arg.prompt).toContain('Setting: front yard.');
     expect(arg.prompt).toContain('sunny day');
@@ -95,7 +95,7 @@ describe('AiService - generateFenceImage', () => {
     expect(storage.saveBuffer).toHaveBeenCalledWith('renders', expect.any(String), expect.any(Buffer));
   });
 
-  it('downloads the URL when the upstream ignores response_format', async () => {
+  it('downloads the URL when the upstream returns a URL instead of b64_json', async () => {
     const { svc, storage, config, generate } = makeService();
     generate.mockResolvedValue({ data: [{ url: 'https://cdn.example.test/img.png' }] });
     const fetchSpy = jest.spyOn(globalThis as any, 'fetch').mockResolvedValue({
