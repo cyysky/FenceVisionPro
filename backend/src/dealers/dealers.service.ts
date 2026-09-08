@@ -33,7 +33,7 @@ export class DealersService {
     });
     const owner = await this.prisma.user.create({
       data: {
-        email: data.ownerEmail.toLowerCase(),
+        email: data.ownerEmail.trim().toLowerCase(),
         passwordHash: await this.auth.hashPassword(data.ownerPassword),
         fullName: data.ownerName,
         role: Role.DEALER_OWNER,
@@ -44,11 +44,12 @@ export class DealersService {
   }
 
   async addStaff(dealerId: string, email: string, fullName: string, password: string) {
-    const exists = await this.prisma.user.findUnique({ where: { email: email.toLowerCase() } });
+    const normalized = email.trim().toLowerCase();
+    const exists = await this.prisma.user.findUnique({ where: { email: normalized } });
     if (exists) throw new ConflictException('Email already registered');
     const u = await this.prisma.user.create({
       data: {
-        email: email.toLowerCase(),
+        email: normalized,
         fullName,
         passwordHash: await this.auth.hashPassword(password),
         role: Role.DEALER_STAFF,

@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: fence
-      POSTGRES_PASSWORD: fence
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fence}
       POSTGRES_DB: fencevisionpro
     volumes:
       - db_data:/var/lib/postgresql/data
@@ -24,10 +24,11 @@ services:
       dockerfile: Dockerfile
     container_name: yardex_backend
     restart: unless-stopped
-    # Non-secret defaults; AI_BASE_URL and AI_API_KEY are loaded from
+    # DB password and JWT secret are interpolated from the root .env
+    # (gitignored). AI_BASE_URL and AI_API_KEY are loaded from
     # backend/.env (gitignored) via env_file below.
     environment:
-      DATABASE_URL: postgresql://fence:fence@db:5432/fencevisionpro
+      DATABASE_URL: postgresql://fence:${POSTGRES_PASSWORD:-fence}@db:5432/fencevisionpro
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       JWT_EXPIRES_IN: 12h
       DATA_DIR: /app/data

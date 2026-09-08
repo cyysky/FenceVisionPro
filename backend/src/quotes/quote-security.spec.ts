@@ -33,7 +33,7 @@ describe('QuotesService - public approval security', () => {
 
   it('rejects a blank 1x1 PNG signature', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', status: 'SENT', notes: null, lineItems: [], wholesaler: { name: 'X', logoUrl: null, template: null },
+      id: 'q1', status: 'SENT', notes: null, lineItems: [], dealer: { name: 'X', logoUrl: null, template: null },
     });
     await expect(svc.approvePublic('q1', BLANK)).rejects.toThrow(/Signature is empty/);
   });
@@ -89,7 +89,7 @@ describe('QuotesService - public approval security', () => {
     // from getPublic after the update) returns the APPROVED state.
     prisma.quote.findUnique
       .mockResolvedValueOnce({
-        id: 'q1', status: 'SENT', notes: null, lineItems: [], wholesaler: { name: 'X', logoUrl: null, template: null },
+        id: 'q1', status: 'SENT', notes: null, lineItems: [], dealer: { name: 'X', logoUrl: null, template: null },
       })
       .mockResolvedValueOnce({
         id: 'q1', reference: 'FVP-2026-X', status: 'APPROVED',
@@ -97,7 +97,7 @@ describe('QuotesService - public approval security', () => {
         lineItems: [], floorPlanWidthM: null, floorPlanHeightM: null,
         fenceSegments: [], renderUrl: null, selectedDesign: null, projectAddress: null,
         subtotal: 0, taxRate: 0, taxAmount: 0, total: 0,
-        wholesaler: { name: 'X', logoUrl: null, template: null },
+        dealer: { name: 'X', logoUrl: null, template: null },
       });
     prisma.quote.update.mockResolvedValue({});
     const out = await svc.approvePublic('q1', `data:image/png;base64,${b64}`);
@@ -106,7 +106,7 @@ describe('QuotesService - public approval security', () => {
 
   it('rejects an oversize signature (> 1.5MB base64)', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', status: 'SENT', notes: null, lineItems: [], wholesaler: { name: 'X', logoUrl: null, template: null },
+      id: 'q1', status: 'SENT', notes: null, lineItems: [], dealer: { name: 'X', logoUrl: null, template: null },
     });
     const big = 'data:image/png;base64,' + 'A'.repeat(1_500_001);
     await expect(svc.approvePublic('q1', big)).rejects.toThrow(/Signature payload/);
@@ -114,7 +114,7 @@ describe('QuotesService - public approval security', () => {
 
   it('rejects a malformed data URL', async () => {
     prisma.quote.findUnique.mockResolvedValue({
-      id: 'q1', status: 'SENT', notes: null, lineItems: [], wholesaler: { name: 'X', logoUrl: null, template: null },
+      id: 'q1', status: 'SENT', notes: null, lineItems: [], dealer: { name: 'X', logoUrl: null, template: null },
     });
     await expect(svc.approvePublic('q1', 'not-a-data-url')).rejects.toThrow(/Signature must be/);
   });
@@ -148,16 +148,16 @@ describe('QuotesService - getPublic PII safety', () => {
       subtotal: 100, taxRate: 0, taxAmount: 0, total: 100,
       renderUrl: '/static/renders/r.png',
       selectedDesign: { id: 'd1', name: 'D', overlayUrl: '/static/overlays/d.png' },
-      wholesaler: { name: 'W', logoUrl: '/static/uploads/l.png', contactEmail: 'leak@wholesale.com', contactPhone: '555', template: { termsHtml: '<p>OK</p>' } },
+      dealer: { name: 'W', logoUrl: '/static/uploads/l.png', contactEmail: 'leak@wholesale.com', contactPhone: '555', template: { termsHtml: '<p>OK</p>' } },
     });
     const out: any = await svc.getPublic('q1');
-    const forbidden = ['customerEmail', 'customerPhone', 'notes', 'floorPlanUrl', 'approvedSignatureUrl', 'wholesalerId', 'fenceSegments', 'createdById'];
+    const forbidden = ['customerEmail', 'customerPhone', 'notes', 'floorPlanUrl', 'approvedSignatureUrl', 'dealerId', 'wholesaler', 'fenceSegments', 'createdById'];
     for (const f of forbidden) expect(out).not.toHaveProperty(f);
-    // Public-safe wholesaler block
-    expect(out.wholesaler).toEqual({ name: 'W', logoUrl: '/static/uploads/l.png', termsHtml: '<p>OK</p>' });
-    // Specifically check the wholesaler PII isn't there
-    expect(out.wholesaler).not.toHaveProperty('contactEmail');
-    expect(out.wholesaler).not.toHaveProperty('contactPhone');
+    // Public-safe dealer block
+    expect(out.dealer).toEqual({ name: 'W', logoUrl: '/static/uploads/l.png', termsHtml: '<p>OK</p>' });
+    // Specifically check the dealer PII isn't there
+    expect(out.dealer).not.toHaveProperty('contactEmail');
+    expect(out.dealer).not.toHaveProperty('contactPhone');
   });
 
   it('exposes approvedAt on an APPROVED quote', async () => {
@@ -168,7 +168,7 @@ describe('QuotesService - getPublic PII safety', () => {
       subtotal: 0, taxRate: 0, taxAmount: 0, total: 0,
       lineItems: [], floorPlanWidthM: null, floorPlanHeightM: null,
       fenceSegments: [], renderUrl: null, selectedDesign: null, projectAddress: null,
-      wholesaler: { name: 'W', logoUrl: null, template: null },
+      dealer: { name: 'W', logoUrl: null, template: null },
     });
     const out: any = await svc.getPublic('q1');
     expect(out.approvedAt).toEqual(approvedDate);
@@ -180,7 +180,7 @@ describe('QuotesService - getPublic PII safety', () => {
       subtotal: 0, taxRate: 0, taxAmount: 0, total: 0,
       lineItems: [], floorPlanWidthM: null, floorPlanHeightM: null,
       fenceSegments: [], renderUrl: null, selectedDesign: null, projectAddress: null,
-      wholesaler: { name: 'W', logoUrl: null, template: null },
+      dealer: { name: 'W', logoUrl: null, template: null },
     });
     await expect(svc.getPublic('q1')).rejects.toThrow(/not available/);
   });

@@ -55,8 +55,9 @@ docker compose up -d --build
 # 2. Apply schema (runs automatically on backend boot) and seed once
 cd backend
 npm install
-DATABASE_URL=postgresql://fence:fence@localhost:5432/fencevisionpro npx prisma migrate deploy
-DATABASE_URL=postgresql://fence:fence@localhost:5432/fencevisionpro npx prisma db seed
+set -a; source ../.env; set +a   # loads the host DATABASE_URL from root .env
+npx prisma migrate deploy
+npm run prisma:seed
 cd ..
 
 # 3. Open
@@ -164,10 +165,17 @@ power two extra visualisation features. The credentials live in
 | `AI_ENABLED` | `true` | Master switch |
 | `AI_BASE_URL` | (empty) | OpenAI-compatible base URL (e.g. `http://host:port/v1`) |
 | `AI_API_KEY` | (empty) | Bearer token for the AI service |
-| `AI_IMAGE_MODEL` | `z-image-turbo` | Model for `/ai/render-image` |
-| `AI_CODE_MODEL` | `mimo-v25-pro` | Model for `/ai/generate-3d` |
+| `AI_IMAGE_MODEL` | `z-image-turbo` | Model for `/ai/render-image` (image service still being provisioned) |
+| `AI_CODE_MODEL` | `deepseek-v4-flash` | Model for `/ai/generate-3d` |
+| `AI_VISION_MODEL` | `MiniMax-M3` | Model for `/ai/analyse-photo` / `/ai/analyse-photo-url` |
 | `AI_IMAGE_SIZE` | `1024x1024` | Output size for image gen |
 | `AI_IMAGE_STEPS` | `9` | Inference steps for image gen |
+
+> Status: `z-image-turbo` is still being set up by the platform team. Code
+> generation (`deepseek-v4-flash`) and photo analysis (`MiniMax-M3`) are live;
+> `/ai/render-image` will only succeed once the image endpoint is ready. When
+> it goes live, update `AI_BASE_URL` / `AI_API_KEY` / `AI_IMAGE_MODEL` in
+> `backend/.env` and run `docker compose restart backend`.
 
 ### Endpoints
 
@@ -233,16 +241,18 @@ sudo usermod -aG docker $USER   # log out and back in
 git clone <your-git-url> yardex
 cd yardex
 
-# Create the real env file
+# Create the real env files
+cp .env.example .env
 cp backend/.env.example backend/.env
-$EDITOR backend/.env          # set DATABASE_URL, JWT_SECRET, AI_BASE_URL, AI_API_KEY, ...
-chmod 600 backend/.env        # protect the API key from other users
+$EDITOR .env backend/.env     # set JWT_SECRET, POSTGRES_PASSWORD, AI_BASE_URL, AI_API_KEY, ...
+chmod 600 .env backend/.env   # protect secrets from other users
 ```
 
 The only env vars you **must** set:
 
 | Variable | Why |
 | --- | --- |
+| `POSTGRES_PASSWORD` | Random string - `openssl rand -hex 24`; must match the password in both `DATABASE_URL` values |
 | `JWT_SECRET` | Random 64-char string - `openssl rand -hex 32` |
 | `AI_BASE_URL` | Your OpenAI-compatible image / chat endpoint |
 | `AI_API_KEY` | Bearer token for that endpoint |
@@ -255,8 +265,9 @@ The only env vars you **must** set:
 > ```bash
 > cd backend
 > npm install
-> DATABASE_URL=postgresql://fence:fence@localhost:5432/fencevisionpro npx prisma migrate deploy
-> DATABASE_URL=postgresql://fence:fence@localhost:5432/fencevisionpro npx prisma db seed
+> set -a; source ../.env; set +a   # loads the host DATABASE_URL from root .env
+> npx prisma migrate deploy
+> npm run prisma:seed
 > cd ..
 > ```
 
@@ -302,6 +313,13 @@ automatically. Open `https://app.yardex.com.my` in a browser.
 If you'd rather stay on the compose-managed ports, change the host-side
 port mapping in `docker-compose.yml` to `80:80` and `443:3000` and run
 nginx in front - but Caddy is a lot less ceremony.
+
+This server is already wired: the shared `lazystorage-nginx` edge container
+terminates TLS for `https://yardex.fmcv.my` and proxies into this compose
+stack (`/public`, `/api`, `/static` to the backend; everything else to the
+frontend). The exact vhost is kept in
+`deploy/nginx/yardex-fmcv-my-vhost.conf`; certs are issued/renewed by the
+box's `lazystorage-certbot` container (webroot challenge).
 
 ### 4. Backups
 
@@ -366,7 +384,7 @@ cd backend
 cp .env.example .env
 npm install
 npx prisma migrate dev
-npx prisma db seed
+npm run prisma:seed
 npm run start:dev
 
 # Frontend (in another terminal)
@@ -377,6 +395,30 @@ npm run dev
 ```
 
 The Vite dev server proxies `/api` and `/static` to `http://localhost:12888`.
+
+## Tests
+
+Both sides have their own test suites. The backend uses Jest + ts-jest and
+the frontend uses Vitest + Testing Library (jsdom). Every API client and
+service is mocked — no live database, model, or network is required.
+
+```bash
+# Backend (Jest, unit tests with full service coverage)
+cd backend
+npm test                       # run once
+npm run test:watch             # watch mode
+npx jest --coverage --runInBand  # coverage report (backend/src/coverage)
+
+# Frontend (Vitest, lib clients + key pages/components)
+cd frontend
+npm test                       # run once
+npm run test:watch             # watch mode
+npm run test:coverage          # coverage report (frontend/coverage)
+```
+
+Both suites are designed to be deterministic and offline; the AI service
+spec mocks the OpenAI client, and the storage spec uses a temporary
+`DATA_DIR` so test runs never touch real uploads or rendered images.
 
 ## Data model (summary)
 - `Dealer` (tenant)

@@ -6,9 +6,9 @@
  *  - getStatus returns the right shape
  *  - getResult strips sales-pipeline fields
  *
- * The background render path is covered indirectly via the
- * validate-submit happy-path + mocked Prisma: we don't wait for
- * the AI service to be called.
+ * The background render worker (runRender) is tested directly with
+ * real temp files so the vision step and READY/FAILED persist paths
+ * are exercised without any network.
  */
 import { Test } from '@nestjs/testing';
 import { PublicLead, PublicLeadStatus, PublicLeadYardSide, PublicLeadPhotoSource } from '@prisma/client';
@@ -16,6 +16,8 @@ import { PublicAiService } from './public-ai.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../ai/ai.service';
 import { StorageService } from '../storage/storage.service';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 
 describe('PublicAiService - getConfig', () => {
   let svc: PublicAiService;
@@ -202,5 +204,165 @@ describe('PublicAiService - getStatus / getResult', () => {
     expect(out.notes).toBeUndefined();
     expect(out.contactedById).toBeUndefined();
     expect(out.convertedQuoteId).toBeUndefined();
+  });
+});
+
+describe('PublicAiService - runRender (background worker)', () => {
+  let svc: PublicAiService;
+  let prisma: any;
+  let ai: any;
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.mkdtemp(join(process.cwd(), '.public-ai-test-'));
+    ai = {
+      analysePhotoPath: jest.fn(),
+      generateFenceImage: jest.fn(),
+      imageModel: 'z-image-turbo',
+    };
+    prisma = {
+      design: { findMany: jest.fn().mockResolvedValue([]) },
+      publicLead: {
+        create: jest.fn(),
+        update: jest.fn().mockImplementation(({ where, data }: any) => Promise.resolve({ id: where.id, ...data })),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'lead1',
+          renderStatus: PublicLeadStatus.PENDING,
+          photoSource: PublicLeadPhotoSource.UPLOADED,
+          inputPhotoPath: '/static/uploads/leads/lead1/photo.jpg',
+          designStyle: 'Picket',
+          firstName: 'Ada',
+          yardSide: PublicLeadYardSide.BACK,
+        }),
+      },
+    };
+    const storage = { saveBuffer: jest.fn() } as any;
+    const mod = await Test.createTestingModule({
+      providers: [
+        PublicAiService,
+        { provide: PrismaService, useValue: prisma },
+        { provide: AiService, useValue: ai },
+        { provide: StorageService, useValue: storage },
+      ],
+    }).compile();
+    svc = mod.get(PublicAiService);
+  });
+
+  afterEach(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it('renders an uploaded photo: vision + generate + READY persist', async () => {
+    const photo = join(tmpDir, 'photo.jpg');
+    await fs.writeFile(photo, Buffer.from('fake-jpeg'));
+    ai.analysePhotoPath.mockResolvedValue({
+      style: 'Picket', color: 'White', heightFt: 5,
+      surroundings: 'Green lawn', notes: 'wide driveway',
+    });
+    ai.generateFenceImage.mockResolvedValue({ url: '/static/renders/lead1.png' });
+
+    await (svc as any).runRender('lead1', photo);
+
+    expect(ai.analysePhotoPath).toHaveBeenCalledWith(photo);
+    const genArg = ai.generateFenceImage.mock.calls[0][0];
+    expect(genArg).toMatchObject({
+      style: 'Picket',
+      color: 'Black',
+      heightFt: 6,
+      surroundings: 'Green lawn',
+      visionDescription: 'Green lawn',
+    });
+    expect(genArg.extraPrompt).toContain('Customer first name: Ada.');
+    expect(genArg.extraPrompt).toContain('Yard side: back.');
+
+    const updateCall = prisma.publicLead.update.mock.calls[0][0];
+    expect(updateCall.data.renderStatus).toBe(PublicLeadStatus.READY);
+    expect(updateCall.data.renderUrl).toBe('/static/renders/lead1.png');
+    expect(updateCall.data.renderModelUsed).toBe('z-image-turbo');
+    expect(updateCall.data.renderError).toBeNull();
+    expect(updateCall.data.renderPrompt).toContain('style=Picket');
+    expect(updateCall.data.renderPrompt).toContain('height=6ft');
+    expect(updateCall.data.renderPrompt).toContain('vision="Green lawn"');
+    expect(updateCall.data.renderPrompt).toContain('extra="Customer first name: Ada.');
+    expect(updateCall.data.generatedAt).toBeInstanceOf(Date);
+  });
+
+  it('resolves a GALLERY lead from data/gallery when no upload path is passed', async () => {
+    (svc as any).dataDir = tmpDir;
+    await fs.mkdir(join(tmpDir, 'gallery'));
+    await fs.writeFile(join(tmpDir, 'gallery', 'front1.jpg'), Buffer.from('fake-jpeg'));
+    prisma.publicLead.findUnique.mockResolvedValue({
+      id: 'lead1',
+      renderStatus: PublicLeadStatus.PENDING,
+      photoSource: PublicLeadPhotoSource.GALLERY,
+      inputPhotoPath: '/static/gallery/front1.jpg',
+      designStyle: null,
+      firstName: null,
+      yardSide: PublicLeadYardSide.FRONT,
+    });
+    ai.analysePhotoPath.mockResolvedValue({ surroundings: 'Suburban lawn' });
+    ai.generateFenceImage.mockResolvedValue({ url: '/static/renders/lead1.png' });
+
+    await (svc as any).runRender('lead1', null);
+
+    expect(ai.analysePhotoPath).toHaveBeenCalledWith(join(tmpDir, 'gallery', 'front1.jpg'));
+    const genArg = ai.generateFenceImage.mock.calls[0][0];
+    expect(genArg.style).toBe('Privacy'); // default style when the lead has none
+    expect(genArg.surroundings).toBe('Suburban lawn');
+    expect(genArg.extraPrompt).toContain('Yard side: front.');
+  });
+
+  it('continues without vision when the vision model fails', async () => {
+    const photo = join(tmpDir, 'photo.jpg');
+    await fs.writeFile(photo, Buffer.from('fake-jpeg'));
+    ai.analysePhotoPath.mockRejectedValue(new Error('vision api down'));
+    ai.generateFenceImage.mockResolvedValue({ url: '/static/renders/lead1.png' });
+
+    await (svc as any).runRender('lead1', photo);
+
+    expect(ai.generateFenceImage).toHaveBeenCalledTimes(1);
+    const genArg = ai.generateFenceImage.mock.calls[0][0];
+    expect(genArg.surroundings).toBeUndefined();
+    expect(genArg.visionDescription).toBeUndefined();
+    expect(prisma.publicLead.update).toHaveBeenCalledTimes(1);
+    expect(prisma.publicLead.update.mock.calls[0][0].data.renderStatus).toBe(PublicLeadStatus.READY);
+  });
+
+  it('skips vision when the input file is missing but still renders', async () => {
+    ai.generateFenceImage.mockResolvedValue({ url: '/static/renders/lead1.png' });
+    await (svc as any).runRender('lead1', join(tmpDir, 'missing.jpg'));
+    expect(ai.analysePhotoPath).not.toHaveBeenCalled();
+    expect(ai.generateFenceImage).toHaveBeenCalledTimes(1);
+    expect(prisma.publicLead.update.mock.calls[0][0].data.renderStatus).toBe(PublicLeadStatus.READY);
+  });
+
+  it('persists FAILED + a truncated error when rendering throws', async () => {
+    const photo = join(tmpDir, 'photo.jpg');
+    await fs.writeFile(photo, Buffer.from('fake-jpeg'));
+    ai.analysePhotoPath.mockResolvedValue({ surroundings: 'lawn' });
+    ai.generateFenceImage.mockRejectedValue(new Error('x'.repeat(600)));
+
+    await (svc as any).runRender('lead1', photo);
+
+    const updateCall = prisma.publicLead.update.mock.calls[0][0];
+    expect(updateCall.data.renderStatus).toBe(PublicLeadStatus.FAILED);
+    expect(updateCall.data.renderError).toHaveLength(500);
+  });
+
+  it('renders nothing when the lead vanished before the worker ran', async () => {
+    prisma.publicLead.findUnique.mockResolvedValue(null);
+    await (svc as any).runRender('lead1', null);
+    expect(ai.analysePhotoPath).not.toHaveBeenCalled();
+    expect(ai.generateFenceImage).not.toHaveBeenCalled();
+    expect(prisma.publicLead.update).not.toHaveBeenCalled();
+  });
+
+  it('summarisePrompt truncates vision and extra prompt text', () => {
+    const summary = (svc as any).summarisePrompt({
+      style: 'Privacy', heightFt: 6, extraPrompt: 'e'.repeat(200), visionDescription: 'v'.repeat(200),
+    });
+    expect(summary).toBe(
+      'style=Privacy height=6ft vision="' + 'v'.repeat(120) + '" extra="' + 'e'.repeat(120) + '"',
+    );
   });
 });

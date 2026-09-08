@@ -53,6 +53,9 @@ describe('InstallationsService', () => {
       quote: {
         findUnique: jest.fn(),
       },
+      installer: {
+        findUnique: jest.fn(),
+      },
     };
     const mod = await Test.createTestingModule({
       providers: [
@@ -328,6 +331,226 @@ describe('InstallationsService', () => {
       // so the test reads as a deliberate contract assertion.
       const t = randomBytes(32).toString('hex');
       expect(t).toMatch(/^[a-f0-9]{64}$/);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // update (+ installer assignment) and create-with-installer
+  // -------------------------------------------------------------------------
+
+  const baseInst = {
+    id: 'i1', quoteId: 'q1', status: 'SCHEDULED',
+    events: [], photos: [], customerLinks: [],
+  };
+
+  describe('update', () => {
+    beforeEach(() => {
+      prisma.installation.findUnique.mockResolvedValue(baseInst);
+      prisma.quote.findUnique.mockResolvedValue({ dealerId: 'wA' });
+      prisma.installation.update.mockResolvedValue({});
+      prisma.installationEvent.create.mockResolvedValue({});
+    });
+
+    it('writes editable fields and logs the change', async () => {
+      await svc.update('i1', ownerA, { scheduledStart: '2026-10-01T10:00:00Z', installerName: 'Inst A' });
+      const data = prisma.installation.update.mock.calls[0][0].data;
+      expect(data.scheduledStart).toBeInstanceOf(Date);
+      expect(data.installerName).toBe('Inst A');
+      expect(prisma.installationEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            type: 'NOTE_ADDED',
+            metadata: { kind: 'installation_updated', fields: ['scheduledStart', 'installerName'] },
+          }),
+        }),
+      );
+    });
+
+    it('clears the installer when an empty string is passed', async () => {
+      await svc.update('i1', ownerA, { installerId: '' });
+      expect(prisma.installation.update.mock.calls[0][0].data.installerId).toBeNull();
+      expect(prisma.installer.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('validates and assigns a same-tenant installer', async () => {
+      prisma.installer.findUnique.mockResolvedValue({
+        id: 'inst1', dealerId: 'wA', name: 'Inst A', phone: '123', email: 'i@x.com',
+      });
+      await svc.update('i1', ownerA, { installerId: 'inst1' });
+      expect(prisma.installation.update.mock.calls[0][0].data.installerId).toBe('inst1');
+    });
+
+    it('forbids assigning another tenant installer', async () => {
+      prisma.installer.findUnique.mockResolvedValue({ id: 'inst1', dealerId: 'wB' });
+      await expect(svc.update('i1', ownerA, { installerId: 'inst1' }))
+        .rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('404s when the installer does not exist', async () => {
+      prisma.installer.findUnique.mockResolvedValue(null);
+      await expect(svc.update('i1', ownerA, { installerId: 'inst1' }))
+        .rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('does not log an event when nothing changed', async () => {
+      await svc.update('i1', ownerA, {});
+      expect(prisma.installationEvent.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('create with installer assignment', () => {
+    it('pre-populates the snapshot fields from the installer row', async () => {
+      prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'wA', status: 'APPROVED' });
+      prisma.installer.findUnique.mockResolvedValue({
+        id: 'inst1', dealerId: 'wA', name: 'Inst A', phone: '123', email: 'i@x.com',
+      });
+      prisma.installation.create.mockResolvedValue({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
+      prisma.installationEvent.create.mockResolvedValue({});
+      prisma.installation.findUnique.mockResolvedValue(baseInst);
+      await svc.create(ownerA, { quoteId: 'q1', installerId: 'inst1' });
+      const data = prisma.installation.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        installerId: 'inst1',
+        installerName: 'Inst A',
+        installerPhone: '123',
+        installerEmail: 'i@x.com',
+      });
+    });
+
+    it('lets the explicit body fields win over the installer snapshot', async () => {
+      prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'wA', status: 'APPROVED' });
+      prisma.installer.findUnique.mockResolvedValue({
+        id: 'inst1', dealerId: 'wA', name: 'Inst A', phone: '123', email: 'i@x.com',
+      });
+      prisma.installation.create.mockResolvedValue({ id: 'i1', quoteId: 'q1', status: 'SCHEDULED' });
+      prisma.installationEvent.create.mockResolvedValue({});
+      prisma.installation.findUnique.mockResolvedValue(baseInst);
+      await svc.create(ownerA, {
+        quoteId: 'q1', installerId: 'inst1', installerName: 'Overridden',
+      });
+      expect(prisma.installation.create.mock.calls[0][0].data.installerName).toBe('Overridden');
+    });
+
+    it('forbids assigning a foreign installer', async () => {
+      prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'wA', status: 'APPROVED' });
+      prisma.installer.findUnique.mockResolvedValue({ id: 'inst1', dealerId: 'wB' });
+      await expect(svc.create(ownerA, { quoteId: 'q1', installerId: 'inst1' }))
+        .rejects.toBeInstanceOf(ForbiddenException);
+    });
+
+    it('404s an unknown installer', async () => {
+      prisma.quote.findUnique.mockResolvedValue({ id: 'q1', dealerId: 'wA', status: 'APPROVED' });
+      prisma.installer.findUnique.mockResolvedValue(null);
+      await expect(svc.create(ownerA, { quoteId: 'q1', installerId: 'inst1' }))
+        .rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Photo list / blob / delete
+  // -------------------------------------------------------------------------
+
+  describe('photo list/blob/delete', () => {
+    beforeEach(() => {
+      prisma.installation.findUnique.mockResolvedValue(baseInst);
+      prisma.quote.findUnique.mockResolvedValue({ dealerId: 'wA' });
+    });
+
+    it('lists photo metadata without the blob', async () => {
+      prisma.installationPhoto.findMany.mockResolvedValue([]);
+      await svc.listPhotos('i1', ownerA);
+      const arg = prisma.installationPhoto.findMany.mock.calls[0][0];
+      expect(arg.where).toEqual({ installationId: 'i1' });
+      expect(arg.select).not.toHaveProperty('data');
+      expect(arg.select.mimeType).toBe(true);
+    });
+
+    it('returns the photo blob for the parent installation', async () => {
+      prisma.installationPhoto.findUnique.mockResolvedValue({
+        id: 'ph1', installationId: 'i1', mimeType: 'image/jpeg', sizeBytes: 3,
+        originalFilename: 'a.jpg', data: Buffer.from('abc'),
+      });
+      const out = await svc.getPhotoBlob('i1', 'ph1', ownerA);
+      expect(out).toMatchObject({ mimeType: 'image/jpeg', sizeBytes: 3, originalFilename: 'a.jpg' });
+      expect(out.data.toString()).toBe('abc');
+    });
+
+    it('404s a photo that belongs to another installation', async () => {
+      prisma.installationPhoto.findUnique.mockResolvedValue({ id: 'ph1', installationId: 'i9' });
+      await expect(svc.getPhotoBlob('i1', 'ph1', ownerA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('deletes a photo and leaves an audit trail', async () => {
+      prisma.installationPhoto.findUnique.mockResolvedValue({
+        id: 'ph1', installationId: 'i1', originalFilename: 'a.jpg',
+      });
+      prisma.installationPhoto.delete.mockResolvedValue({});
+      prisma.installationEvent.create.mockResolvedValue({});
+      await expect(svc.deletePhoto('i1', 'ph1', ownerA)).resolves.toEqual({ ok: true });
+      expect(prisma.installationPhoto.delete).toHaveBeenCalledWith({ where: { id: 'ph1' } });
+      expect(prisma.installationEvent.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            metadata: { kind: 'photo_deleted', photoId: 'ph1', originalFilename: 'a.jpg' },
+          }),
+        }),
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Customer link list / revoke
+  // -------------------------------------------------------------------------
+
+  describe('customer link lifecycle', () => {
+    beforeEach(() => {
+      prisma.installation.findUnique.mockResolvedValue(baseInst);
+      prisma.quote.findUnique.mockResolvedValue({ dealerId: 'wA' });
+    });
+
+    it('lists the links for an installation', async () => {
+      prisma.publicCustomerLink.findMany.mockResolvedValue([]);
+      await svc.listCustomerLinks('i1', ownerA);
+      expect(prisma.publicCustomerLink.findMany).toHaveBeenCalledWith({
+        where: { installationId: 'i1' },
+        orderBy: { createdAt: 'desc' },
+      });
+    });
+
+    it('soft-revokes a link and records an event', async () => {
+      prisma.publicCustomerLink.findUnique.mockResolvedValue({
+        id: 'l1', installationId: 'i1', revokedAt: null,
+      });
+      prisma.publicCustomerLink.update.mockResolvedValue({});
+      prisma.installationEvent.create.mockResolvedValue({});
+      await expect(svc.revokeCustomerLink('i1', 'l1', ownerA)).resolves.toEqual({ ok: true });
+      expect(prisma.publicCustomerLink.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { revokedAt: expect.any(Date) } }),
+      );
+      expect(prisma.installationEvent.create).toHaveBeenCalled();
+    });
+
+    it('404s when revoking a link of another installation', async () => {
+      prisma.publicCustomerLink.findUnique.mockResolvedValue({ id: 'l9', installationId: 'i9' });
+      await expect(svc.revokeCustomerLink('i1', 'l9', ownerA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // findByIdPublic
+  // -------------------------------------------------------------------------
+
+  describe('findByIdPublic', () => {
+    it('returns the installation with the public include shape', async () => {
+      prisma.installation.findUnique.mockResolvedValue({ id: 'i1' });
+      const out = await svc.findByIdPublic('i1');
+      expect(out).toEqual({ id: 'i1' });
+      const arg = prisma.installation.findUnique.mock.calls[0][0];
+      expect(arg.include.quote.select).toMatchObject({
+        reference: true, customerName: true, customerEmail: true,
+      });
+      expect(arg.include.photos.select).not.toHaveProperty('data');
+      expect(arg.include.events.orderBy).toEqual({ occurredAt: 'asc' });
     });
   });
 });

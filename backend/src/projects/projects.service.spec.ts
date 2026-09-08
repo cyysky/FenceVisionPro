@@ -384,4 +384,269 @@ describe('ProjectsService', () => {
         .rejects.toBeInstanceOf(ForbiddenException);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // list / create / update / softDelete
+  // -------------------------------------------------------------------------
+
+  describe('list', () => {
+    it('scopes dealers to their tenant and returns rows + total', async () => {
+      prisma.project.findMany.mockResolvedValue([{ id: 'p1' }]);
+      prisma.project.count.mockResolvedValue(1);
+      const out = await svc.list(staffA, { q: '  smith  ', take: 5, skip: 10, status: 'DRAFT' });
+      expect(out).toEqual({ rows: [{ id: 'p1' }], total: 1 });
+      const findArg = prisma.project.findMany.mock.calls[0][0];
+      expect(findArg.where.dealerId).toBe('wA');
+      expect(findArg.where.status).toBe('DRAFT');
+      expect(findArg.where.OR).toEqual([
+        { customerName: { contains: 'smith', mode: 'insensitive' } },
+        { customerEmail: { contains: 'smith', mode: 'insensitive' } },
+        { notes: { contains: 'smith', mode: 'insensitive' } },
+      ]);
+      expect(findArg.take).toBe(5);
+      expect(findArg.skip).toBe(10);
+      expect(prisma.project.count).toHaveBeenCalledWith({ where: findArg.where });
+    });
+
+    it('lets admin see every row and clamps take/skip', async () => {
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.project.count.mockResolvedValue(0);
+      await svc.list(admin, { take: 9999, skip: -3 });
+      const arg = prisma.project.findMany.mock.calls[0][0];
+      expect(arg.where).toEqual({});
+      expect(arg.take).toBe(500);
+      expect(arg.skip).toBe(0);
+    });
+  });
+
+  describe('create', () => {
+    it('pins dealer users to their own tenant even when a dealerId is supplied', async () => {
+      prisma.project.create.mockResolvedValue({ id: 'p1' });
+      await svc.create(ownerA, {
+        customerName: 'Jane', installScope: 'FULL', dealerId: 'wB',
+      });
+      expect(prisma.project.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ dealerId: 'wA', installScope: 'FULL', status: ProjectStatus.DRAFT }),
+      });
+    });
+
+    it('rejects an admin creating with an unknown dealerId', async () => {
+      prisma.dealer.findUnique.mockResolvedValue(null);
+      await expect(svc.create(admin, { customerName: 'X', installScope: 'FULL', dealerId: 'nope' }))
+        .rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('rejects a caller with no tenant', async () => {
+      await expect(svc.create(admin, { customerName: 'X', installScope: 'PARTIAL' }))
+        .rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
+
+  describe('update', () => {
+    const dto = { customerName: 'New', totalLinearMeters: 42 };
+    it('applies a partial update after ownership check', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', submittedAt: null });
+      prisma.project.update.mockResolvedValue({ id: 'p1' });
+      await svc.update('p1', staffA, dto);
+      expect(prisma.project.update).toHaveBeenCalledWith({
+        where: { id: 'p1' },
+        data: expect.objectContaining({ customerName: 'New', totalLinearMeters: 42 }),
+      });
+    });
+
+    it('stamps submittedAt only on the first SUBMITTED transition', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', submittedAt: null });
+      prisma.project.update.mockResolvedValue({});
+      await svc.update('p1', ownerA, { status: ProjectStatus.SUBMITTED });
+      const data = prisma.project.update.mock.calls[0][0].data;
+      expect(data.status).toBe(ProjectStatus.SUBMITTED);
+      expect(data.submittedAt).toBeInstanceOf(Date);
+    });
+
+    it('does not re-stamp submittedAt when already submitted', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', submittedAt: new Date('2026-01-01') });
+      prisma.project.update.mockResolvedValue({});
+      await svc.update('p1', ownerA, { status: ProjectStatus.SUBMITTED });
+      expect(prisma.project.update.mock.calls[0][0].data.submittedAt).toBeUndefined();
+    });
+  });
+
+  describe('softDelete', () => {
+    it('flips an active project to CANCELLED', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', status: ProjectStatus.DRAFT });
+      prisma.project.update.mockResolvedValue({ id: 'p1', status: ProjectStatus.CANCELLED });
+      await expect(svc.softDelete('p1', ownerA)).resolves.toMatchObject({ status: ProjectStatus.CANCELLED });
+    });
+
+    it('is a no-op for an already-cancelled project', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA', status: ProjectStatus.CANCELLED });
+      await svc.softDelete('p1', ownerA);
+      expect(prisma.project.update).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Documents
+  // -------------------------------------------------------------------------
+
+  describe('document lifecycle', () => {
+    it('lists documents with metadata only', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectDocument.findMany.mockResolvedValue([{ id: 'd1' }]);
+      const out = await svc.listDocuments('p1', staffA);
+      expect(out).toEqual([{ id: 'd1' }]);
+      expect(prisma.projectDocument.findMany).toHaveBeenCalledWith({
+        where: { projectId: 'p1' },
+        orderBy: [{ uploadedAt: 'desc' }],
+        select: expect.any(Object),
+      });
+    });
+
+    it('returns the raw blob for the owning tenant', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectDocument.findUnique.mockResolvedValue({ id: 'd1', projectId: 'p1', data: Buffer.from('x') });
+      await expect(svc.getDocumentBlob('p1', 'd1', staffA)).resolves.toMatchObject({ projectId: 'p1' });
+    });
+
+    it('404s a missing or foreign document blob', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectDocument.findUnique.mockResolvedValue(null);
+      await expect(svc.getDocumentBlob('p1', 'missing', ownerA)).rejects.toBeInstanceOf(NotFoundException);
+      prisma.projectDocument.findUnique.mockResolvedValue({ id: 'd1', projectId: 'p2' });
+      await expect(svc.getDocumentBlob('p1', 'd1', ownerA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('deletes a document that belongs to the project', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectDocument.findUnique.mockResolvedValue({ id: 'd1', projectId: 'p1' });
+      prisma.projectDocument.delete.mockResolvedValue({});
+      await expect(svc.deleteDocument('p1', 'd1', ownerA)).resolves.toEqual({ ok: true });
+      expect(prisma.projectDocument.delete).toHaveBeenCalledWith({ where: { id: 'd1' } });
+    });
+
+    it('rejects an empty upload', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      const file = { originalname: 'e.png', buffer: Buffer.alloc(0), size: 0, mimetype: 'image/png' };
+      await expect(svc.uploadDocument('p1', ownerA, file, { kind: 'SITE_PHOTO' }))
+        .rejects.toThrow(/Empty file/);
+    });
+
+    it('keeps dimensions null for PDFs', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      const buf = Buffer.from('%PDF-1.4\n% test');
+      const file = { originalname: 'doc.pdf', buffer: buf, size: buf.length, mimetype: 'application/pdf' };
+      prisma.projectDocument.create.mockImplementation(({ data }: any) => data);
+      const out = await svc.uploadDocument('p1', ownerA, file, { kind: 'PROPERTY_DEED' });
+      expect(out.mimeType).toBe('application/pdf');
+      expect(out.widthPx).toBeUndefined();
+      expect(out.heightPx).toBeUndefined();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Selections + measurements
+  // -------------------------------------------------------------------------
+
+  describe('selections', () => {
+    it('adds a selection to the project', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectFenceSelection.create.mockResolvedValue({ id: 's1' });
+      await svc.addSelection('p1', ownerA, { productId: 'prod', linearMeters: 10, heightFt: 6 });
+      expect(prisma.projectFenceSelection.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          projectId: 'p1', productId: 'prod', linearMeters: 10, heightFt: 6, sortOrder: 0,
+        }),
+      });
+    });
+
+    it('updates only supplied selection fields', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectFenceSelection.findUnique.mockResolvedValue({ id: 's1', projectId: 'p1' });
+      prisma.projectFenceSelection.update.mockResolvedValue({ id: 's1' });
+      await svc.updateSelection('p1', 's1', ownerA, { linearMeters: 12 });
+      expect(prisma.projectFenceSelection.update).toHaveBeenCalledWith({
+        where: { id: 's1' },
+        data: { linearMeters: 12 },
+      });
+    });
+
+    it('404s updates/removals for foreign selections', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectFenceSelection.findUnique.mockResolvedValue({ id: 's1', projectId: 'p2' });
+      await expect(svc.updateSelection('p1', 's1', ownerA, { linearMeters: 1 }))
+        .rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('removes a selection', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectFenceSelection.findUnique.mockResolvedValue({ id: 's1', projectId: 'p1' });
+      prisma.projectFenceSelection.delete.mockResolvedValue({});
+      const out = await svc.removeSelection('p1', 's1', ownerA);
+      expect(out).toEqual({ ok: true });
+      expect(prisma.projectFenceSelection.delete).toHaveBeenCalledWith({ where: { id: 's1' } });
+    });
+  });
+
+  describe('measurements', () => {
+    it('adds a measurement', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectMeasurement.create.mockResolvedValue({ id: 'm1' });
+      await svc.addMeasurement('p1', ownerA, { label: 'Run A', lengthM: 20, heightFt: 6 });
+      const data = prisma.projectMeasurement.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({ projectId: 'p1', label: 'Run A', lengthM: 20, heightFt: 6 });
+      expect(data.widthM).toBeNull();
+    });
+
+    it('updates and removes measurements', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectMeasurement.findUnique.mockResolvedValue({ id: 'm1', projectId: 'p1' });
+      prisma.projectMeasurement.update.mockResolvedValue({ id: 'm1' });
+      await svc.updateMeasurement('p1', 'm1', ownerA, { notes: 'sloped' });
+      expect(prisma.projectMeasurement.update).toHaveBeenCalledWith({
+        where: { id: 'm1' }, data: { notes: 'sloped' },
+      });
+    });
+
+    it('404s unknown measurements', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectMeasurement.findUnique.mockResolvedValue(null);
+      await expect(svc.removeMeasurement('p1', 'm1', ownerA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Visualisations
+  // -------------------------------------------------------------------------
+
+  describe('visualisation list/blob', () => {
+    it('lists visualisations', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectVisualization.findMany.mockResolvedValue([{ id: 'v1' }]);
+      await expect(svc.listVisualizations('p1', staffA)).resolves.toEqual([{ id: 'v1' }]);
+    });
+
+    it('returns the blob for the owning tenant only', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: 'wA' });
+      prisma.projectVisualization.findUnique.mockResolvedValue({ id: 'v1', projectId: 'p1' });
+      await expect(svc.getVisualizationBlob('p1', 'v1', ownerA)).resolves.toMatchObject({ id: 'v1' });
+      prisma.projectVisualization.findUnique.mockResolvedValue({ id: 'v1', projectId: 'p2' });
+      await expect(svc.getVisualizationBlob('p1', 'v1', ownerA)).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe('promoteToQuote guard rails', () => {
+    it('refuses to promote a cancelled project', async () => {
+      prisma.project.findUnique.mockResolvedValue({
+        id: 'p1', dealerId: 'wA', status: ProjectStatus.CANCELLED, customerEmail: 'a@b.co',
+      });
+      await expect(svc.promoteToQuote('p1', admin, { customerEmail: 'a@b.co' }))
+        .rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it('refuses to promote a tenant-less project for a non-admin', async () => {
+      prisma.project.findUnique.mockResolvedValue({ id: 'p1', dealerId: null, status: ProjectStatus.DRAFT });
+      await expect(svc.promoteToQuote('p1', staffA, { customerEmail: 'a@b.co' }))
+        .rejects.toBeInstanceOf(ForbiddenException);
+    });
+  });
 });
