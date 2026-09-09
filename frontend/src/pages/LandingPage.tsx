@@ -56,19 +56,19 @@ export default function LandingPage() {
       </header>
 
       {/* ===== Hero: 3D Home & Fence Visualizer ===== */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-14 pb-12">
-        <div className="text-center mb-6">
-          <div className="inline-block px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-medium mb-4">
+      <section className="max-w-[1500px] mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-10">
+        <div className="text-center mb-5">
+          <div className="inline-block px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-medium mb-3">
             Design in 3D — free preview · no signup
           </div>
           <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-slate-900 leading-tight">
             Design your fence in <span className="text-brand-600">3D</span> before you commit.
           </h1>
-          <p className="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-3 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
             Pick a home, draw your boundary, choose a style — then send the design to
             Yardex as a lead and we'll follow up with a tailored quote within one business day.
           </p>
-          <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="mt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
               to="/ai-generate"
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 transition"
@@ -91,10 +91,10 @@ export default function LandingPage() {
             title="Yardex 3D Home & Fence Visualizer — design your fence and submit it as a lead"
             allow="clipboard-write"
             className="block w-full"
-            style={{ height: 'min(86vh, 840px)', border: 0 }}
+            style={{ height: 'clamp(520px, calc(100vh - 130px), 1200px)', border: 0 }}
           />
         </div>
-        <p className="mt-4 text-center text-xs text-slate-500">
+        <p className="mt-3 text-center text-xs text-slate-500">
           Tip: draw your fence in the <b>Fence</b> tab, then choose the <b>Results</b> tab and hit
           “Send design &amp; get a quote” — a Yardex specialist will call or email you.
         </p>
