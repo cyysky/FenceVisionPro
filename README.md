@@ -438,6 +438,14 @@ and get a Yardex-rendered fence preview powered by the existing `AiService`
 submission creates a `PublicLead` row that sales reps can pick up from the
 authenticated `/leads` page and convert into a draft `Quote` with one click.
 
+There is also a 3D Home & Fence Visualizer
+(`/3d-home-fence-visualizer.html`, embedded in the landing page hero at
+`yardex.fmcv.my`). Visitors pick a home model, draw a fence boundary, choose a
+style and height, and hit **Send design & get a quote** — the lead form is
+pre-filled with a live design summary and submits a PNG screenshot of the 3D
+scene to the same `POST /api/public/ai-generation` endpoint, so it lands in the
+same `PublicLead` inbox and starts the AI render pipeline.
+
 ### Endpoints (all under `/api`)
 
 | Method | Path | Auth | Notes |

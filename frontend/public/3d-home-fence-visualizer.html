@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yardex · 3D Home &amp; Fence Visualizer (metres)</title>
+<style>
+  :root {
+    --bg: #101820;
+    --panel: #18232e;
+    --panel-2: #1f2d3a;
+    --line: #2d4152;
+    --text: #e8eef2;
+    --muted: #94a7b5;
+    --accent: #38b6ff;
+    --accent-2: #6ee7b7;
+    --danger: #ff7a7a;
+    --radius: 12px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  #viewer { position: fixed; inset: 0; }
+  #viewer canvas { display: block; width: 100%; height: 100%; }
+
+  #panel {
+    position: fixed; top: 12px; left: 12px; bottom: 12px; width: 340px;
+    background: linear-gradient(180deg, rgba(24,35,46,0.97), rgba(18,27,36,0.97));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+    display: flex; flex-direction: column; overflow: hidden; z-index: 10;
+  }
+  #panel header {
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--line);
+    background: rgba(255,255,255,0.03);
+  }
+  #panel header h1 { margin: 0; font-size: 17px; letter-spacing: 0.2px; }
+  #panel header .sub { color: var(--muted); font-size: 11.5px; margin-top: 3px; }
+  .tabs { display: flex; gap: 4px; padding: 8px 10px 0; }
+  .tab-btn {
+    flex: 1; padding: 8px 0; border: 1px solid transparent; border-radius: 8px 8px 0 0;
+    background: transparent; color: var(--muted); cursor: pointer; font-size: 13px;
+    border-bottom: 2px solid transparent; transition: all .15s;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(56,182,255,0.06); }
+  .tab-body { flex: 1; overflow-y: auto; padding: 12px 14px 16px; }
+  .tab-body h3 {
+    margin: 14px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent-2);
+  }
+  .tab-body h3:first-child { margin-top: 2px; }
+  .muted { color: var(--muted); font-size: 12px; }
+  button, select, input { font: inherit; color: var(--text); }
+  button {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    padding: 8px 12px; border-radius: 8px; cursor: pointer; transition: all .15s; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: rgba(56,182,255,0.15); border-color: rgba(56,182,255,0.55); }
+  button.primary.active { background: rgba(56,182,255,0.35); border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+  .row > * { flex: 1; min-width: 90px; }
+  .field { margin: 9px 0; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .field input[type=number], .field select {
+    width: 100%; background: #101820; border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 9px; font-size: 13px;
+  }
+  input[type=range] { width: 100%; accent-color: var(--accent); }
+  .range-val { color: var(--accent); font-weight: 600; }
+
+  .home-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .home-card {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 6px;
+    cursor: pointer; text-align: center; transition: all .15s;
+  }
+  .home-card:hover { border-color: var(--accent); transform: translateY(-1px); }
+  .home-card.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: rgba(56,182,255,0.08); }
+  .home-card .thumb {
+    height: 78px; border-radius: 7px; background: linear-gradient(160deg, #dfeef5, #b8d0dd);
+    background-size: cover; background-position: center; display: flex; align-items: center; justify-content: center;
+    color: #16303d; font-size: 11px;
+  }
+  .home-card .name { font-size: 12px; margin-top: 5px; font-weight: 600; }
+  .home-card .dims { font-size: 10.5px; color: var(--muted); }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
+  }
+  .stat .k { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .stat .v { font-size: 19px; font-weight: 700; margin-top: 3px; }
+  .stat .v small { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .warn { display: none; margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: rgba(255,122,122,0.12); border: 1px solid rgba(255,122,122,0.4); font-size: 12px; color: var(--danger); }
+  .warn.show { display: block; }
+
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 6px 0; }
+  .btn-row button { flex: 1; min-width: 90px; }
+
+  #hintbar {
+    position: fixed; left: 50%; bottom: 14px; transform: translateX(-50%);
+    background: rgba(12,20,28,0.82); border: 1px solid var(--line); color: var(--text);
+    padding: 8px 16px; border-radius: 999px; font-size: 12.5px; z-index: 8; white-space: nowrap;
+    max-width: 92vw; overflow: hidden; text-overflow: ellipsis;
+  }
+  #ruler {
+    position: fixed; left: 18px; bottom: 18px; z-index: 8; width: 130px;
+    background: rgba(255,255,255,0.85); border-radius: 5px; padding: 4px 6px 5px; color: #111;
+    font-size: 10px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,.3);
+  }
+  #ruler .bar { height: 8px; background: repeating-linear-gradient(90deg, #111 0 2px, transparent 2px 10px), linear-gradient(#111,#111); margin: 3px 0 2px; position: relative; }
+  #ruler .bar::after { content: ""; position: absolute; top: 0; left: 0; width: 2px; height: 12px; background: #111; }
+  #ruler .bar::before { content: ""; position: absolute; top: 0; right: 0; width: 2px; height: 12px; background: #111; }
+
+  #menuToggle {
+    display: none; position: fixed; top: 12px; left: 12px; z-index: 12;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    color: var(--text); font-size: 20px; padding: 6px 12px; cursor: pointer;
+  }
+
+  #helpModal {
+    position: fixed; inset: 0; background: rgba(5,10,15,0.65); z-index: 20;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  #helpModal .box {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    max-width: 520px; width: 100%; padding: 22px 24px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+    max-height: 84vh; overflow-y: auto;
+  }
+  #helpModal h2 { margin: 0 0 10px; font-size: 18px; }
+  #helpModal ul { margin: 8px 0 14px; padding-left: 18px; }
+  #helpModal li { margin: 6px 0; font-size: 13.5px; color: #cfd9e0; line-height: 1.45; }
+
+  .hidden { display: none !important; }
+
+  .lead-form .field { margin: 9px 0; }
+  .lead-form input[type=text], .lead-form input[type=email],
+  .lead-form input[type=tel], .lead-form select {
+    width: 100%; background: #101820; border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 9px; font-size: 13px; color: var(--text);
+  }
+  .lead-summary {
+    margin: 8px 0; padding: 8px 10px; border-radius: 8px;
+    background: rgba(56,182,255,0.08); border: 1px solid rgba(56,182,255,0.35);
+    font-size: 12px; color: var(--accent); line-height: 1.5;
+  }
+  .lead-status { display: none; margin: 8px 0; padding: 8px 10px; border-radius: 8px; font-size: 12px; line-height: 1.45; }
+  .lead-status.show { display: block; }
+  .lead-status.error { background: rgba(255,122,122,0.12); border: 1px solid rgba(255,122,122,0.4); color: var(--danger); }
+  .lead-status.ok { background: rgba(110,231,183,0.1); border: 1px solid rgba(110,231,183,0.4); color: var(--accent-2); }
+
+  @media (max-width: 760px) {
+    #panel { transform: translateX(-110%); transition: transform .2s; width: min(340px, 92vw); }
+    #panel.open { transform: translateX(0); }
+    #menuToggle { display: block; }
+  }
+</style></head>
+<body>
+
+<div id="viewer"></div>
+
+<div id="menuToggle" title="Menu">☰</div>
+
+<aside id="panel">
+  <header>
+    <h1>🏡 Home &amp; Fence Visualizer</h1>
+    <div class="sub">Customer · seller · installer preview &nbsp;—&nbsp; all lengths in metres (m)</div>
+  </header>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="home">Home</button>
+    <button class="tab-btn" data-tab="fence">Fence</button>
+    <button class="tab-btn" data-tab="results">Results</button>
+  </div>
+
+  <div class="tab-body" id="tab-home">
+    <h3>Choose a home model</h3>
+    <div class="home-grid">
+      <button class="home-card active" data-home="bungalow">
+        <div class="thumb" id="thumb-bungalow">loading…</div>
+        <div class="name">Bungalow</div><div class="dims">12 × 8 m</div>
+      </button>
+      <button class="home-card" data-home="two-story">
+        <div class="thumb" id="thumb-two-story">loading…</div>
+        <div class="name">Two-Storey</div><div class="dims">10 × 8 m</div>
+      </button>
+      <button class="home-card" data-home="terrace">
+        <div class="thumb" id="thumb-terrace">loading…</div>
+        <div class="name">Terrace Unit</div><div class="dims">6 × 10 m</div>
+      </button>
+      <button class="home-card" data-home="villa">
+        <div class="thumb" id="thumb-villa">loading…</div>
+        <div class="name">Villa</div><div class="dims">14 × 10 m</div>
+      </button>
+    </div>
+
+    <h3>Land size</h3>
+    <div class="row">
+      <div class="field"><label>Width (X)</label><input type="number" id="landW" value="20" min="8" max="60" step="1"><span class="muted"> m</span></div>
+      <div class="field"><label>Depth (Z)</label><input type="number" id="landD" value="20" min="8" max="60" step="1"><span class="muted"> m</span></div>
+    </div>
+
+    <h3>Home position</h3>
+    <div class="field">
+      <label>Rotation <span class="range-val" id="rotVal">0°</span></label>
+      <input type="range" id="rotRange" min="0" max="360" step="1" value="0">
+    </div>
+    <div class="btn-row">
+      <button id="nudgeLX">← Move</button>
+      <button id="nudgeRX">Move →</button>
+      <button id="nudgeDZ">↓ Move</button>
+      <button id="nudgeUZ">Move ↑</button>
+    </div>
+    <div class="btn-row"><button id="resetPos">Center &amp; reset rotation</button></div>
+  </div>
+
+  <div class="tab-body hidden" id="tab-fence">
+    <h3>Draw the fence</h3>
+    <div class="btn-row">
+      <button id="drawToggle" class="primary">✏️ Draw fence</button>
+      <button id="undoBtn" disabled>Undo</button>
+      <button id="clearBtn">Clear</button>
+    </div>
+    <div class="btn-row">
+      <button id="closeBtn" disabled>Close fence</button>
+      <button id="reopenBtn" class="hidden">Re-open (edit)</button>
+    </div>
+    <div class="muted" id="fenceStatus" style="margin-top:6px;">No fence points yet.</div>
+
+    <h3>Quick boundary</h3>
+    <div class="field">
+      <label>Inset from land edge</label>
+      <input type="number" id="insetInput" value="1" min="0" max="8" step="0.5">
+    </div>
+    <button id="boundaryBtn" style="width:100%">Auto fence along boundary</button>
+
+    <h3>Fence style</h3>
+    <div class="field">
+      <label>Material</label>
+      <select id="styleSel">
+        <option value="timber">Timber paling</option>
+        <option value="metal">Metal modular</option>
+        <option value="concrete">Concrete panel</option>
+        <option value="chain">Chain link</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>Height — <span class="range-val" id="heightVal">1.50 m</span></label>
+      <input type="range" id="heightRange" min="0.8" max="2.5" step="0.05" value="1.5">
+    </div>
+    <div class="field">
+      <label>Post spacing — <span class="range-val" id="spacingVal">2.0 m</span></label>
+      <input type="range" id="spacingRange" min="1" max="4" step="0.1" value="2">
+    </div>
+    <div class="field">
+      <label><input type="checkbox" id="gateChk"> Include a driveway / pedestrian gate on the first segment</label>
+    </div>
+    <div class="field">
+      <label>Gate width</label>
+      <input type="number" id="gateWidth" value="3" min="1" max="6" step="0.1">
+    </div>
+  </div>
+
+  <div class="tab-body hidden" id="tab-results">
+    <h3>Measurements (live)</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="k">Fence length</div><div class="v" id="statLength">—</div></div>
+      <div class="stat"><div class="k">Enclosed area</div><div class="v" id="statArea">—</div></div>
+      <div class="stat"><div class="k">Posts</div><div class="v" id="statPosts">—</div></div>
+      <div class="stat"><div class="k">Panels</div><div class="v" id="statPanels">—</div></div>
+      <div class="stat"><div class="k">Gate</div><div class="v" id="statGate">—</div></div>
+      <div class="stat"><div class="k">Land</div><div class="v" id="statLand">—</div></div>
+    </div>
+    <div class="warn" id="warnBox"></div>
+
+    <h3>Share / export</h3>
+    <div class="btn-row">
+      <button id="btnPng">📸 Screenshot PNG</button>
+      <button id="btnCsvCopy">📋 Copy coordinates</button>
+    </div>
+    <div class="btn-row">
+      <button id="btnCsv">↓ CSV layout</button>
+      <button id="btnJson">↓ JSON project</button>
+    </div>
+    <p class="muted" style="margin-top:10px;">Coordinates are real-world metres: X = east–west, Z = north–south (origin 0,0 at the centre of the land). Installers can use the CSV to set out posts.</p>
+
+    <h3>Send to Yardex as a lead</h3>
+    <p class="muted" style="margin-bottom:6px;">We'll keep your design (this view + measurements) and a Yardex specialist will follow up with a tailored quote within one business day.</p>
+    <div class="lead-form" id="leadForm">
+      <div class="field">
+        <label>First name <span class="muted">(optional)</span></label>
+        <input type="text" id="leadName" maxlength="80" placeholder="Jane">
+      </div>
+      <div class="row">
+        <div class="field"><label>Email</label><input type="email" id="leadEmail" maxlength="200" placeholder="jane@example.com"></div>
+        <div class="field"><label>Phone</label><input type="tel" id="leadPhone" maxlength="40" placeholder="+60 12 345 6789"></div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Which side of the house?</label>
+          <select id="leadYardSide">
+            <option value="FRONT">Front yard</option>
+            <option value="BACK">Back yard</option>
+          </select>
+        </div>
+      </div>
+      <div class="lead-summary" id="leadSummary">Timber paling · 1.50 m high</div>
+      <button id="leadSubmitBtn" class="primary" style="width:100%; margin-top:8px;">📩 Send design &amp; get a quote</button>
+      <div class="lead-status" id="leadStatus" role="status"></div>
+    </div>
+    <div class="hidden" id="leadThanks">
+      <div class="lead-summary">✅ Design submitted — our reference <b id="leadRef"></b></div>
+      <p class="muted" style="margin-top:8px;">A Yardex specialist will contact you within one business day. You can keep designing in the meantime.</p>
+      <button id="leadCloseThanks" style="width:100%">Back to designing</button>
+    </div>
+  </div>
+</aside>
+
+<div id="ruler"><div class="bar"></div>1 metre</div>
+<div id="hintbar">🖱 Drag = orbit · scroll = zoom · Enter = finish</div>
+
+<div id="helpModal">
+  <div class="box">
+    <h2>Welcome 👋</h2>
+    <p class="muted">A quick 3D preview tool for customers, fence sellers and installers. Everything on the ground is measured in metres.</p>
+    <ul>
+      <li><b>Home tab</b> — pick a typical home, set land width/depth, rotate and nudge the house.</li>
+      <li><b>Fence tab</b> — press <b>Draw fence</b>, then left-click on the ground to place corner points. Right-click or press Enter to close a loop.</li>
+      <li><b>Ctrl+click</b> on a handle removes that point; <b>Undo</b> removes the last point.</li>
+      <li>Pick a style (timber / metal / concrete / chain link), height and post spacing — the fence rebuilds instantly.</li>
+      <li><b>Results tab</b> — live fence length, enclosed area, post/panel counts, plus PNG / CSV / JSON export for quotes and installer layout.</li>
+      <li><b>Results tab</b> — send your design to Yardex as a lead and a specialist will follow up with a quote.</li>
+    </ul>
+    <button id="helpClose" class="primary" style="width:100%">Got it — start designing</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script><script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+/* ---------------- helpers ---------------- */
+const $ = id => document.getElementById(id);
+const fmt = x => (Math.round(x * 100) / 100).toFixed(2).replace(/\.?0+$/, '');
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const deg2rad = d => d * Math.PI / 180;
+
+const state = {
+  homeType: 'bungalow',
+  homeRot: 0,
+  homeOX: 0,
+  homeOZ: 0,
+  landW: 20,
+  landD: 20,
+  fenceStyle: 'timber',
+  fenceHeight: 1.5,
+  postSpacing: 2.0,
+  gateEnabled: false,
+  gateWidth: 3.0,
+  points: [],
+  fenceClosed: false,
+  drawing: false
+};
+const HOME_TYPES = ['bungalow', 'two-story', 'terrace', 'villa'];
+let stats = { length: 0, area: 0, posts: 0, panels: 0, gate: 0, open: true };
+let lastExport = { posts: [], gateSeg: null };
+
+/* ---------------- scene ---------------- */
+let renderer, scene, camera, controls, raycaster;
+let homeGroup, fenceRoot, landGroup, hoverMarker, previewLine;
+const container = $('viewer');
+
+const _SHARED = new Set();
+function markShared(m) { _SHARED.add(m); return m; }
+
+function clearGroup(g) {
+  if (!g) return;
+  if (g.userData.geos) {
+    g.userData.geos.forEach(geo => geo.dispose());
+    g.userData.geos = [];
+  }
+  while (g.children.length) {
+    const c = g.children.pop();
+    if (c.geometry && !g.userData.geos) c.geometry.dispose();
+    if (c.material && !_SHARED.has(c.material)) c.material.dispose();
+    clearGroup(c);
+  }
+}
+function pooledGeo(geo) {
+  if (!fenceRoot.userData.geos) fenceRoot.userData.geos = [];
+  fenceRoot.userData.geos.push(geo);
+  return geo;
+}
+const boxGeo = (w, h, d) => pooledGeo(new THREE.BoxGeometry(w, h, d));
+const hboxGeo = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+const sphGeo = new THREE.SphereGeometry(1, 12, 10);
+
+function initScene() {
+  renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.06;
+  renderer.setSize(container.clientWidth, container.clientHeight);
+  container.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xcfe4f0);
+  scene.fog = new THREE.Fog(0xcfe4f0, 140, 360);
+
+  camera = new THREE.PerspectiveCamera(50, container.clientWidth / container.clientHeight, 0.1, 600);
+  camera.position.set(26, 18, 27);
+
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.target.set(0, 0.4, 0);
+  controls.maxPolarAngle = Math.PI / 2 - 0.04;
+  controls.minDistance = 5;
+  controls.maxDistance = 130;
+  controls.update();
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x84936b, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 2.4);
+  sun.position.set(20, 30, 14);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -45; sun.shadow.camera.right = 45;
+  sun.shadow.camera.top = 45; sun.shadow.camera.bottom = -45;
+  sun.shadow.camera.far = 100;
+  sun.shadow.bias = -0.0004;
+  scene.add(sun);
+  scene.add(new THREE.AmbientLight(0xffffff, 0.25));
+
+  const grass = new THREE.Mesh(
+    new THREE.PlaneGeometry(500, 500),
+    new THREE.MeshStandardMaterial({ color: 0x87a96b, roughness: 1 })
+  );
+  grass.rotation.x = -Math.PI / 2;
+  grass.receiveShadow = true;
+  scene.add(grass);
+
+  const grid = new THREE.GridHelper(80, 80, 0x1e3a4d, 0x5b7480);
+  grid.position.y = 0.018;
+  const gmats = grid.material.array || [grid.material];
+  for (const m of gmats) { m.transparent = true; m.opacity = 0.24; m.depthWrite = false; }
+  scene.add(grid);
+
+  landGroup = new THREE.Group(); scene.add(landGroup);
+  homeGroup = new THREE.Group(); scene.add(homeGroup);
+  fenceRoot = new THREE.Group(); fenceRoot.userData.geos = []; scene.add(fenceRoot);
+
+  raycaster = new THREE.Raycaster();
+  hoverMarker = new THREE.Mesh(sphGeo, new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.8 }));
+  hoverMarker.scale.setScalar(0.16); hoverMarker.visible = false;
+  scene.add(hoverMarker);
+
+  const lineMat = new THREE.LineDashedMaterial({ color: 0xffa94d, dashSize: 0.35, gapSize: 0.22 });
+  previewLine = new THREE.Line(new THREE.BufferGeometry(), lineMat);
+  previewLine.visible = false;
+  scene.add(previewLine);
+
+  window.addEventListener('resize', () => {
+    const w = container.clientWidth, h = container.clientHeight;
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+    renderer.setSize(w, h);
+  });
+}
+
+/* ---------------- materials & textures ---------------- */
+let _winTex, _doorTex, _chainTex;
+const mWall  = markShared(new THREE.MeshStandardMaterial({ color: 0xf3efe6, roughness: 0.96 }));
+const mTrim  = markShared(new THREE.MeshStandardMaterial({ color: 0x2c3944, roughness: 0.8 }));
+const mConcr = markShared(new THREE.MeshStandardMaterial({ color: 0xd8d3c9, roughness: 1 }));
+function roofMat(color) { return new THREE.MeshStandardMaterial({ color: color || 0x7b4a33, roughness: 0.85, side: THREE.DoubleSide }); }
+
+function makeWindowTexture() {
+  if (_winTex) return _winTex;
+  const c = document.createElement('canvas'); c.width = 256; c.height = 180;
+  const x = c.getContext('2d');
+  x.fillStyle = '#f7f7f2'; x.fillRect(0, 0, 256, 180);
+  x.fillStyle = '#9cc9df'; x.fillRect(16, 16, 224, 150);
+  x.fillStyle = 'rgba(255,255,255,0.5)'; x.fillRect(16, 16, 224, 28);
+  x.strokeStyle = '#f7f7f2'; x.lineWidth = 8;
+  x.beginPath(); x.moveTo(128, 16); x.lineTo(128, 166); x.stroke();
+  x.beginPath(); x.moveTo(16, 92); x.lineTo(240, 92); x.stroke();
+  _winTex = new THREE.CanvasTexture(c); _winTex.colorSpace = THREE.SRGBColorSpace;
+  return _winTex;
+}
+function makeDoorTexture() {
+  if (_doorTex) return _doorTex;
+  const c = document.createElement('canvas'); c.width = 160; c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#6d4c34'; x.fillRect(0, 0, 160, 256);
+  x.fillStyle = '#7d5a40'; x.fillRect(10, 10, 140, 236);
+  x.fillStyle = 'rgba(46,30,20,0.35)';
+  x.fillRect(22, 30, 48, 96); x.fillRect(90, 30, 48, 96);
+  x.fillRect(22, 146, 48, 88); x.fillRect(90, 146, 48, 88);
+  x.fillStyle = '#d8c467'; x.beginPath(); x.arc(40, 192, 8, 0, Math.PI * 2); x.fill();
+  _doorTex = new THREE.CanvasTexture(c); _doorTex.colorSpace = THREE.SRGBColorSpace;
+  return _doorTex;
+}
+function makeChainTexture() {
+  if (_chainTex) return _chainTex;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const x = c.getContext('2d');
+  x.clearRect(0, 0, 128, 128);
+  x.strokeStyle = 'rgba(66,102,84,0.95)'; x.lineWidth = 2;
+  const s = 32;
+  for (let i = -128; i < 256; i += s) {
+    x.beginPath(); x.moveTo(i, 0); x.lineTo(i + s, 128); x.stroke();
+    x.beginPath(); x.moveTo(i, 128); x.lineTo(i + s, 0); x.stroke();
+  }
+  _chainTex = new THREE.CanvasTexture(c);
+  _chainTex.wrapS = _chainTex.wrapT = THREE.RepeatWrapping;
+  return _chainTex;
+}
+
+const winMat  = markShared(new THREE.MeshStandardMaterial({ map: makeWindowTexture(), roughness: 0.15, metalness: 0.05 }));
+const doorMat = markShared(new THREE.MeshStandardMaterial({ map: makeDoorTexture(), roughness: 0.7 }));
+
+function addWin(g, x, z, y, w, h, rotY) {
+  const m = new THREE.Mesh(hboxGeo(w, h, 0.08), winMat);
+  m.position.set(x, y, z); m.rotation.y = rotY || 0;
+  g.add(m);
+}
+function addDoor(g, x, z, y, w, h, rotY) {
+  const m = new THREE.Mesh(hboxGeo(w, h, 0.1), doorMat);
+  m.position.set(x, y, z); m.rotation.y = rotY || 0;
+  g.add(m);
+}
+
+/* ---------------- home builders ---------------- */
+function makeGableRoof(spanX, depthZ, wallH, pitch, eaves, color) {
+  const shape = new THREE.Shape();
+  shape.moveTo(-spanX / 2 - eaves, 0);
+  shape.lineTo(0, pitch + eaves * 0.35);
+  shape.lineTo(spanX / 2 + eaves, 0);
+  const geo = new THREE.ExtrudeGeometry(shape, { depth: depthZ + eaves * 2, bevelEnabled: false });
+  geo.translate(0, 0, -(depthZ / 2 + eaves));
+  const m = new THREE.Mesh(geo, roofMat(color));
+  m.position.y = wallH; m.castShadow = true;
+  return m;
+}
+function makeHipRoof(w, d, wallH, h, eaves, color) {
+  const r0 = Math.sqrt(w * w + d * d) / 2 + eaves * 1.6;
+  const geo = new THREE.ConeGeometry(r0, h, 4);
+  const m = new THREE.Mesh(geo, roofMat(color));
+  m.rotation.y = Math.PI / 4;
+  m.scale.set((w / 2 + eaves) / (r0 * Math.SQRT1_2), 1, (d / 2 + eaves) / (r0 * Math.SQRT1_2));
+  m.position.y = wallH;
+  m.castShadow = true;
+  return m;
+}
+function addWalls(g, w, h, d, receiveShadow) {
+  const wall = new THREE.Mesh(hboxGeo(w, h, d), mWall);
+  wall.position.y = h / 2;
+  wall.castShadow = true; wall.receiveShadow = !!receiveShadow;
+  g.add(wall);
+}
+function addSlab(g, w, d, y, z, color) {
+  const m = new THREE.Mesh(hboxGeo(w, 0.16, d), new THREE.MeshStandardMaterial({ color: color || 0xc9c2b6, roughness: 1 }));
+  m.position.set(0, y, z); m.castShadow = true; m.receiveShadow = true;
+  g.add(m);
+}
+function addColumn(g, x, z, h, yBase, size) {
+  const s = size || 0.18;
+  const m = new THREE.Mesh(hboxGeo(s, h, s), mTrim);
+  m.position.set(x, yBase + h / 2, z); m.castShadow = true;
+  g.add(m);
+}
+
+function buildBungalow() {
+  const g = new THREE.Group();
+  const W = 12, D = 8, H = 2.8;
+  addWalls(g, W, H, D, true);
+  addWin(g, -3.4, D / 2 + 0.015, 1.35, 1.6, 1.3, 0);
+  addWin(g, 3.4, D / 2 + 0.015, 1.35, 1.6, 1.3, 0);
+  addDoor(g, 0, D / 2 + 0.015, 1.1, 1.1, 2.2, 0);
+  addWin(g, -2.6, -D / 2 - 0.015, 1.35, 1.6, 1.3, Math.PI);
+  addWin(g, 2.6, -D / 2 - 0.015, 1.35, 1.6, 1.3, Math.PI);
+  addWin(g, W / 2 + 0.015, -2.4, 1.25, 1.4, 1.2, -Math.PI / 2);
+  addWin(g, -W / 2 - 0.015, -2.4, 1.25, 1.4, 1.2, Math.PI / 2);
+  addWin(g, W / 2 + 0.015, 2.4, 1.25, 1.4, 1.2, -Math.PI / 2);
+  addWin(g, -W / 2 - 0.015, 2.4, 1.25, 1.4, 1.2, Math.PI / 2);
+  g.add(makeGableRoof(W, D, H, 1.7, 0.6, 0xa25a32));
+  addSlab(g, 4.2, 2.0, 0.14, D / 2 + 0.8, 0xd0c8ba);
+  addColumn(g, -1.8, D / 2 + 1.0, 2.5, 0.14);
+  addColumn(g, 1.8, D / 2 + 1.0, 2.5, 0.14);
+  const proof = new THREE.Mesh(hboxGeo(4.6, 0.14, 2.2), roofMat(0x8a5340));
+  proof.position.set(0, 2.62, D / 2 + 0.8); proof.castShadow = true;
+  g.add(proof);
+  return g;
+}
+
+function buildTwoStory() {
+  const g = new THREE.Group();
+  const W = 10, D = 8, H = 5.6;
+  addWalls(g, W, H, D, true);
+  const band = new THREE.Mesh(hboxGeo(W + 0.25, 0.16, D + 0.25), mTrim);
+  band.position.y = 2.8; band.castShadow = true;
+  g.add(band);
+  addWin(g, -2.5, D / 2 + 0.015, 1.25, 1.7, 1.35, 0);
+  addWin(g, 2.5, D / 2 + 0.015, 1.25, 1.7, 1.35, 0);
+  addWin(g, -2.5, D / 2 + 0.015, 4.15, 1.7, 1.35, 0);
+  addWin(g, 2.5, D / 2 + 0.015, 4.15, 1.7, 1.35, 0);
+  addDoor(g, 0, D / 2 + 0.015, 1.15, 1.1, 2.2, 0);
+  addWin(g, -2.5, -D / 2 - 0.015, 1.25, 1.5, 1.3, Math.PI);
+  addWin(g, 2.5, -D / 2 - 0.015, 1.25, 1.5, 1.3, Math.PI);
+  addWin(g, -2.5, -D / 2 - 0.015, 4.15, 1.5, 1.3, Math.PI);
+  addWin(g, 2.5, -D / 2 - 0.015, 4.15, 1.5, 1.3, Math.PI);
+  addWin(g, W / 2 + 0.015, 2.5, 1.25, 1.5, 1.2, -Math.PI / 2);
+  addWin(g, -W / 2 - 0.015, 2.5, 1.25, 1.5, 1.2, Math.PI / 2);
+  addWin(g, W / 2 + 0.015, -2.5, 4.15, 1.2, 1.2, -Math.PI / 2);
+  addWin(g, -W / 2 - 0.015, -2.5, 4.15, 1.2, 1.2, Math.PI / 2);
+  addSlab(g, 3.4, 1.3, 2.86, D / 2 + 0.35, 0xb9b2a5);
+  const railMat = new THREE.MeshStandardMaterial({ color: 0x3a4651, roughness: 0.7 });
+  for (let i = 0; i < 8; i++) {
+    const a = i / 7 * Math.PI;
+    const bx = Math.cos(a) * 1.45, bz = D / 2 + 0.35 + Math.sin(a) * 0.45;
+    const p = new THREE.Mesh(hboxGeo(0.06, 0.95, 0.06), railMat);
+    p.position.set(bx, 3.28, bz); p.castShadow = true; g.add(p);
+  }
+  const slab = new THREE.Mesh(hboxGeo(W + 0.35, 0.28, D + 0.35), roofMat(0x4b5a68));
+  slab.position.y = H + 0.1; slab.castShadow = true; g.add(slab);
+  const parMat = new THREE.MeshStandardMaterial({ color: 0xc7c2b8, roughness: 0.9 });
+  const par = new THREE.Mesh(hboxGeo(W + 0.8, 0.5, 0.16), parMat);
+  par.position.set(0, H + 0.42, D / 2 + 0.22); par.castShadow = true; g.add(par);
+  const par2 = par.clone(); par2.position.z = -(D / 2 + 0.22); g.add(par2);
+  const par3 = new THREE.Mesh(hboxGeo(0.16, 0.5, D + 0.8), parMat);
+  par3.position.set(W / 2 + 0.22, H + 0.42, 0); par3.castShadow = true; g.add(par3);
+  const par4 = new THREE.Mesh(hboxGeo(0.16, 0.5, D + 0.8), parMat);
+  par4.position.set(-(W / 2 + 0.22), H + 0.42, 0); par4.castShadow = true; g.add(par4);
+  return g;
+}
+
+function buildTerrace() {
+  const g = new THREE.Group();
+  const W = 6, D = 10, H = 3.0;
+  addWalls(g, W, H, D, true);
+  for (const side of [-1, 1]) {
+    const pw = new THREE.Mesh(hboxGeo(0.14, H + 0.15, D + 0.5), new THREE.MeshStandardMaterial({ color: 0xb5a896, roughness: 1 }));
+    pw.position.set(side * (W / 2 + 0.07), (H + 0.15) / 2, 0); pw.castShadow = true;
+    g.add(pw);
+  }
+  addDoor(g, 0, D / 2 + 0.015, 1.15, 1.0, 2.3, 0);
+  addWin(g, -1.85, D / 2 + 0.015, 1.5, 1.3, 1.2, 0);
+  addWin(g, 1.85, D / 2 + 0.015, 1.5, 1.3, 1.2, 0);
+  addWin(g, -1.85, -D / 2 - 0.015, 1.5, 1.3, 1.2, Math.PI);
+  addWin(g, 1.85, -D / 2 - 0.015, 1.5, 1.3, 1.2, Math.PI);
+  addDoor(g, 0, -D / 2 - 0.015, 1.15, 0.9, 2.2, Math.PI);
+  const slab = new THREE.Mesh(hboxGeo(W + 0.45, 0.32, D + 0.45), roofMat(0x54636f));
+  slab.position.y = H + 0.05; slab.castShadow = true; g.add(slab);
+  return g;
+}
+
+function buildVilla() {
+  const g = new THREE.Group();
+  const W = 14, D = 10, H = 3.2;
+  addWalls(g, W, H, D, true);
+  addWin(g, -4.5, D / 2 + 0.015, 1.45, 1.8, 1.4, 0);
+  addWin(g, -1.5, D / 2 + 0.015, 1.45, 1.8, 1.4, 0);
+  addWin(g, 1.5, D / 2 + 0.015, 1.45, 1.8, 1.4, 0);
+  addWin(g, 4.5, D / 2 + 0.015, 1.45, 1.8, 1.4, 0);
+  addDoor(g, 0, D / 2 + 0.015, 1.25, 1.9, 2.5, 0);
+  addWin(g, -4, -D / 2 - 0.015, 1.45, 1.7, 1.35, Math.PI);
+  addWin(g, -1, -D / 2 - 0.015, 1.45, 1.7, 1.35, Math.PI);
+  addWin(g, 1, -D / 2 - 0.015, 1.45, 1.7, 1.35, Math.PI);
+  addWin(g, 4, -D / 2 - 0.015, 1.45, 1.7, 1.35, Math.PI);
+  addWin(g, W / 2 + 0.015, 3.2, 1.45, 1.6, 1.3, -Math.PI / 2);
+  addWin(g, W / 2 + 0.015, -3.2, 1.45, 1.6, 1.3, -Math.PI / 2);
+  addWin(g, -W / 2 - 0.015, 3.2, 1.45, 1.6, 1.3, Math.PI / 2);
+  addWin(g, -W / 2 - 0.015, -3.2, 1.45, 1.6, 1.3, Math.PI / 2);
+  addSlab(g, 8.6, 2.4, 0.15, D / 2 + 0.85, 0xcec6b8);
+  for (let i = -2; i <= 2; i++) addColumn(g, i * 1.8, D / 2 + 1.1, 2.9, 0.15, 0.18);
+  const vroof = new THREE.Mesh(hboxGeo(9.0, 0.16, 2.6), roofMat(0x7a4d38));
+  vroof.position.set(0, 3.08, D / 2 + 0.75); vroof.castShadow = true;
+  g.add(vroof);
+  g.add(makeHipRoof(W, D, H, 2.3, 0.7, 0x8d4c34));
+  return g;
+}
+
+function buildHome(type) {
+  switch (type) {
+    case 'two-story': return buildTwoStory();
+    case 'terrace': return buildTerrace();
+    case 'villa': return buildVilla();
+    default: return buildBungalow();
+  }
+}/* ---------------- land ---------------- */
+function makeLabel(text, scale) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 80;
+  const x = c.getContext('2d');
+  x.font = 'bold 44px Segoe UI, sans-serif';
+  x.textAlign = 'center'; x.textBaseline = 'middle';
+  x.fillStyle = 'rgba(16,28,38,0.85)';
+  x.fillRect(0, 10, 256, 60);
+  x.strokeStyle = 'rgba(255,255,255,0.85)'; x.lineWidth = 4;
+  x.strokeRect(2, 12, 252, 56);
+  x.fillStyle = '#ffffff';
+  x.fillText(text, 128, 40);
+  const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, depthWrite: false }));
+  const s = scale || 1;
+  sp.scale.set(3.2 * s, 1 * s, 1);
+  sp.position.y = 0.08;
+  return sp;
+}
+
+function updateLand() {
+  state.landW = clamp(Number($('landW').value) || 20, 6, 80);
+  state.landD = clamp(Number($('landD').value) || 20, 6, 80);
+  $('landW').value = state.landW; $('landD').value = state.landD;
+  clearGroup(landGroup);
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(state.landW, state.landD), new THREE.MeshStandardMaterial({ color: 0xded6c6, roughness: 1 }));
+  pad.rotation.x = -Math.PI / 2; pad.position.y = 0.012; pad.receiveShadow = true;
+  landGroup.add(pad);
+  const bnd = [
+    new THREE.Vector3(-state.landW / 2, 0.028, -state.landD / 2),
+    new THREE.Vector3(state.landW / 2, 0.028, -state.landD / 2),
+    new THREE.Vector3(state.landW / 2, 0.028, state.landD / 2),
+    new THREE.Vector3(-state.landW / 2, 0.028, state.landD / 2)
+  ];
+  const lg = new THREE.BufferGeometry().setFromPoints(bnd);
+  const line = new THREE.LineLoop(lg, new THREE.LineBasicMaterial({ color: 0x444f59, transparent: true, opacity: 0.75 }));
+  line.renderOrder = 2;
+  landGroup.add(line);
+  const lblW = makeLabel(state.landW + ' m', state.landW > 40 ? 1.4 : 1);
+  lblW.position.set(0, 0, state.landD / 2 + 1.1);
+  landGroup.add(lblW);
+  const lblD = makeLabel(state.landD + ' m', state.landD > 40 ? 1.4 : 1);
+  lblD.position.set(state.landW / 2 + 1.4, 0, 0);
+  landGroup.add(lblD);
+  updateHome();
+}
+
+/* ---------------- home update ---------------- */
+function updateHome() {
+  clearGroup(homeGroup);
+  const h = buildHome(state.homeType);
+  h.rotation.y = deg2rad(state.homeRot);
+  h.position.set(state.homeOX, 0, state.homeOZ);
+  homeGroup.add(h);
+  updateStatLand();
+}
+
+/* ---------------- fence ---------------- */
+function round2(v) { return Math.round(v * 100) / 100; }
+function segLen(a, b) { return Math.hypot(b.x - a.x, b.z - a.z); }
+
+function autoBoundary(inset) {
+  const i = clamp(inset != null ? inset : (Number($('insetInput').value) || 0), 0, Math.min(state.landW, state.landD) / 2 - 0.2);
+  const hw = state.landW / 2 - i, hd = state.landD / 2 - i;
+  state.points = [
+    { x: round2(-hw), z: round2(-hd) },
+    { x: round2(hw), z: round2(-hd) },
+    { x: round2(hw), z: round2(hd) },
+    { x: round2(-hw), z: round2(hd) }
+  ];
+  state.fenceClosed = true;
+  updateFence();
+}
+
+function makePost(style, H) {
+  const g = new THREE.Group();
+  if (style === 'timber') {
+    const p = new THREE.Mesh(boxGeo(0.1, H, 0.1), new THREE.MeshStandardMaterial({ color: 0x8a5a2b, roughness: 0.9 }));
+    p.position.y = H / 2; p.castShadow = true; g.add(p);
+    const cap = new THREE.Mesh(boxGeo(0.16, 0.06, 0.16), new THREE.MeshStandardMaterial({ color: 0x6f4520, roughness: 0.9 }));
+    cap.position.y = H + 0.03; cap.castShadow = true; g.add(cap);
+  } else if (style === 'metal') {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x38424c, roughness: 0.55, metalness: 0.55 });
+    const p = new THREE.Mesh(boxGeo(0.08, H, 0.08), mat);
+    p.position.y = H / 2; p.castShadow = true; g.add(p);
+    const ball = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), mat);
+    ball.position.y = H + 0.03; g.add(ball);
+  } else if (style === 'concrete') {
+    const phi = new THREE.MeshStandardMaterial({ color: 0xb9b3a9, roughness: 1 });
+    const p = new THREE.Mesh(boxGeo(0.12, H + 0.28, 0.12), phi);
+    p.position.y = (H + 0.28) / 2; p.castShadow = true; g.add(p);
+    const cap = new THREE.Mesh(boxGeo(0.2, 0.08, 0.2), new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.9 }));
+    cap.position.y = H + 0.24; cap.castShadow = true; g.add(cap);
+  } else {
+    const mat = new THREE.MeshStandardMaterial({ color: 0x39624e, roughness: 0.75, metalness: 0.35 });
+    const p = new THREE.Mesh(boxGeo(0.07, H, 0.07), mat);
+    p.position.y = H / 2; p.castShadow = true; g.add(p);
+    const cap = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.14, 8), mat);
+    cap.position.y = H + 0.07; g.add(cap);
+  }
+  return g;
+}
+
+function makePanel(style, a, b, H) {
+  const g = new THREE.Group();
+  const len = Math.hypot(b.x - a.x, b.z - a.z);
+  const ang = Math.atan2(b.z - a.z, b.x - a.x);
+  const mx = (a.x + b.x) / 2, mz = (a.z + b.z) / 2;
+  if (style === 'timber') {
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x9a6a34, roughness: 0.9 });
+    for (const y of [0.35, H - 0.2]) {
+      const r = new THREE.Mesh(boxGeo(len, 0.06, 0.05), railMat);
+      r.position.set(mx, y, mz); r.rotation.y = ang; r.castShadow = true;
+      g.add(r);
+    }
+    const pickMat = new THREE.MeshStandardMaterial({ color: 0xb98647, roughness: 0.85 });
+    const count = Math.max(2, Math.floor(len / 0.15));
+    for (let i = 0; i < count; i++) {
+      const t = (i + 1) / (count + 1);
+      const px = a.x + (b.x - a.x) * t, pz = a.z + (b.z - a.z) * t;
+      const pk = new THREE.Mesh(boxGeo(0.115, H - 0.08, 0.024), pickMat);
+      pk.position.set(px, H / 2, pz); pk.rotation.y = ang; pk.castShadow = true;
+      g.add(pk);
+    }
+  } else if (style === 'metal') {
+    const railMat = new THREE.MeshStandardMaterial({ color: 0x46515c, roughness: 0.5, metalness: 0.5 });
+    for (const y of [0.3, H / 2, H - 0.15]) {
+      const r = new THREE.Mesh(boxGeo(len, 0.045, 0.024), railMat);
+      r.position.set(mx, y, mz); r.rotation.y = ang; r.castShadow = true;
+      g.add(r);
+    }
+  } else if (style === 'concrete') {
+    const panel = new THREE.Mesh(boxGeo(len, H, 0.07), new THREE.MeshStandardMaterial({ color: 0xd2cdc3, roughness: 1 }));
+    panel.position.set(mx, H / 2, mz); panel.rotation.y = ang; panel.castShadow = true; panel.receiveShadow = true;
+    g.add(panel);
+    const cap = new THREE.Mesh(boxGeo(len + 0.04, 0.12, 0.1), new THREE.MeshStandardMaterial({ color: 0x9aa2a8, roughness: 0.9 }));
+    cap.position.set(mx, H + 0.1, mz); cap.rotation.y = ang; cap.castShadow = true;
+    g.add(cap);
+  } else {
+    const tex = makeChainTexture().clone();
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(Math.max(1, len / 0.5), Math.max(1, H / 0.5));
+    const chainMat = new THREE.MeshStandardMaterial({
+      map: tex, transparent: true, alphaTest: 0.12, side: THREE.DoubleSide,
+      color: 0x51806a, roughness: 0.85, depthWrite: false
+    });
+    const mesh = new THREE.Mesh(pooledGeo(new THREE.PlaneGeometry(len, H)), chainMat);
+    mesh.position.set(mx, H / 2, mz); mesh.rotation.y = ang; mesh.renderOrder = 1;
+    g.add(mesh);
+    const wire = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, len, 6), new THREE.MeshStandardMaterial({ color: 0x2f5140, roughness: 0.5, metalness: 0.6 }));
+    wire.rotation.z = Math.PI / 2; wire.rotation.y = -ang; wire.position.set(mx, H, mz);
+    g.add(wire);
+  }
+  return g;
+}
+
+function buildGate(seg, H) {
+  const g = new THREE.Group();
+  const gw = seg.width, leafW = gw / 2;
+  const mat = new THREE.MeshStandardMaterial({ color: 0x2c353d, roughness: 0.5, metalness: 0.6 });
+  const ang = Math.atan2(seg.z1 - seg.z0, seg.x1 - seg.x0);
+  g.position.set(seg.x0, 0, seg.z0);
+  g.rotation.y = ang;
+  for (let side = 0; side < 2; side++) {
+    const leaf = new THREE.Group();
+    const leafCX = side === 0 ? leafW / 2 : leafW * 1.5;
+    const vr = new THREE.Mesh(boxGeo(0.06, H, 0.06), mat); vr.position.set(leafCX, H / 2, 0); vr.castShadow = true; leaf.add(vr);
+    const top = new THREE.Mesh(boxGeo(leafW - 0.04, 0.08, 0.07), mat);
+    top.position.set(leafCX, H - 0.15, 0); top.castShadow = true; leaf.add(top);
+    const low = new THREE.Mesh(boxGeo(leafW - 0.04, 0.08, 0.07), mat);
+    low.position.set(leafCX, 0.8, 0); low.castShadow = true; leaf.add(low);
+    const bars = Math.max(2, Math.round((leafW - 0.2) / 0.35));
+    for (let i = 0; i < bars; i++) {
+      const bx = (side === 0 ? 0.03 : leafW + 0.03) + i * (leafW - 0.12) / Math.max(1, bars - 1);
+      const b = new THREE.Mesh(boxGeo(0.045, H - 0.35, 0.045), mat);
+      b.position.set(bx, H / 2 + 0.1, 0); b.castShadow = true; leaf.add(b);
+    }
+    const dW = leafW - 0.3, dH = H - 0.5;
+    const diagLen = Math.hypot(dW, dH);
+    const diag = new THREE.Mesh(boxGeo(diagLen, 0.05, 0.05), mat);
+    diag.position.set(side === 0 ? dW / 2 : leafW + 0.3 + dW / 2, side === 0 ? 0.25 + dH / 2 : H - 0.25 - dH / 2, 0);
+    diag.rotation.z = Math.atan2(dH, dW) * (side === 0 ? -1 : -1);
+    diag.castShadow = true; leaf.add(diag);
+    g.add(leaf);
+  }
+  const label = makeLabel('GATE ' + fmt(gw) + ' m', 0.7);
+  label.position.set(gw / 2, H + 0.7, 0);
+  g.add(label);
+  return g;
+}
+
+function polygonArea(pts) {
+  let area = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i], b = pts[(i + 1) % pts.length];
+    area += a.x * b.z - b.x * a.z;
+  }
+  return Math.abs(area) / 2;
+}
+
+function buildFenceAll() {
+  clearGroup(fenceRoot);
+  let pts = state.points;
+  if (pts.length === 0) {
+    stats = { length: 0, area: 0, posts: 0, panels: 0, gate: 0, open: true };
+    lastExport = { posts: [], gateSeg: null };
+    updateStats();
+    return;
+  }
+  pts = pts.map(p => ({ x: p.x, z: p.z }));
+  const closed = state.fenceClosed;
+  const n = pts.length;
+
+  const markMat = new THREE.MeshStandardMaterial({ color: 0x27c2ff, emissive: 0x0b5d85, roughness: 0.4 });
+  for (const p of pts) {
+    const m = new THREE.Mesh(sphGeo, markMat);
+    m.scale.setScalar(0.13);
+    m.position.set(p.x, 0.14, p.z);
+    fenceRoot.add(m);
+  }
+  if (n < 2) { updateStats(); return; }
+
+  const segs = [];
+  const cnt = closed ? n : n - 1;
+  for (let i = 0; i < cnt; i++) segs.push({ a: pts[i], b: pts[(i + 1) % n] });
+
+  let fenceSegs = segs.slice();
+  let gateSeg = null;
+  if (state.gateEnabled && segs[0] && segLen(segs[0].a, segs[0].b) >= 0.6) {
+    const L = segLen(segs[0].a, segs[0].b);
+    const gw = clamp(state.gateWidth, 0.5, L * 0.95);
+    const dx = (segs[0].b.x - segs[0].a.x) / L, dz = (segs[0].b.z - segs[0].a.z) / L;
+    const t = (L - gw) / 2;
+    const g0 = { x: round2(segs[0].a.x + dx * t), z: round2(segs[0].a.z + dz * t) };
+    const g1 = { x: round2(g0.x + dx * gw), z: round2(g0.z + dz * gw) };
+    fenceSegs = [{ a: segs[0].a, b: g0 }];
+    fenceSegs.push({ a: g1, b: segs[0].b });
+    fenceSegs = fenceSegs.concat(segs.slice(1));
+    gateSeg = { x0: g0.x, z0: g0.z, x1: g1.x, z1: g1.z, width: gw };
+  }
+
+  const posts = [];
+  const spacing = Math.max(0.5, state.postSpacing);
+  for (const s of fenceSegs) {
+    const L = segLen(s.a, s.b);
+    const ni = Math.max(1, Math.round(L / spacing));
+    for (let k = 0; k <= ni; k++) {
+      const t = k / ni;
+      const x = round2(s.a.x + (s.b.x - s.a.x) * t);
+      const z = round2(s.a.z + (s.b.z - s.a.z) * t);
+      if (posts.length === 0 || Math.hypot(x - posts[posts.length - 1].x, z - posts[posts.length - 1].z) > 1e-3) posts.push({ x, z });
+    }
+  }
+  if (closed && posts.length > 1 && Math.hypot(posts[0].x - posts[posts.length - 1].x, posts[0].z - posts[posts.length - 1].z) < 1e-3) posts.pop();
+  lastExport = { posts: posts.slice(), gateSeg: gateSeg ? { ...gateSeg } : null };
+
+  const H = state.fenceHeight;
+  const style = state.fenceStyle;
+  for (const p of posts) {
+    const pm = makePost(style, H);
+    pm.position.set(p.x, 0, p.z);
+    fenceRoot.add(pm);
+  }
+
+  const pairs = [];
+  const pc = posts.length;
+  if (closed) { for (let i = 0; i < pc; i++) pairs.push([posts[i], posts[(i + 1) % pc]]); }
+  else { for (let i = 0; i < pc - 1; i++) pairs.push([posts[i], posts[i + 1]]); }
+  for (const [a, b] of pairs) fenceRoot.add(makePanel(style, a, b, H));
+
+  if (gateSeg) fenceRoot.add(buildGate(gateSeg, H));
+
+  const perimeter = segs.reduce((s, e) => s + segLen(e.a, e.b), 0);
+  const fenceLen = perimeter - (gateSeg ? gateSeg.width : 0);
+  stats = {
+    length: fenceLen,
+    area: closed ? polygonArea(pts) : 0,
+    posts: posts.length,
+    panels: closed ? pc : pc - 1,
+    gate: gateSeg ? gateSeg.width : 0,
+    open: !closed
+  };
+  updateStats();
+}
+
+function updateFence() {
+  buildFenceAll();
+  const n = state.points.length;
+  $('undoBtn').disabled = n === 0;
+  $('closeBtn').disabled = n < 3 || state.fenceClosed;
+  $('reopenBtn').classList.toggle('hidden', !state.fenceClosed);
+  if (n === 0) {
+    $('fenceStatus').textContent = 'No fence points yet — press "Draw fence" and click the ground.';
+  } else if (state.fenceClosed) {
+    $('fenceStatus').textContent = n + ' points · closed loop · ' + stats.length + ' m of fencing.';
+  } else {
+    $('fenceStatus').textContent = n + ' points placed · open run · click first point or press Enter to close.';
+  }
+  updateStatLand();
+}
+
+/* ---------------- stats / results ---------------- */
+function updateStatLand() {
+  $('statLand').innerHTML = state.landW + ' × ' + state.landD + ' <small>m</small>';
+}
+function updateStats() {
+  $('statLength').innerHTML = stats.length ? fmt(stats.length) + ' <small>m</small>' : '—';
+  $('statArea').innerHTML = stats.open ? '— <small>open</small>' : fmt(stats.area) + ' <small>m²</small>';
+  $('statPosts').textContent = stats.posts || '—';
+  $('statPanels').textContent = stats.panels || '—';
+  $('statGate').innerHTML = stats.gate ? fmt(stats.gate) + ' <small>m</small>' : 'none';
+  const warn = [];
+  if (!stats.open && stats.area > state.landW * state.landD * 1.01) warn.push('Fence encloses more area than the land — check the boundary points.');
+  for (const p of state.points) {
+    if (Math.abs(p.x) > state.landW / 2 + 0.05 || Math.abs(p.z) > state.landD / 2 + 0.05) { warn.push('Some fence points are outside the land boundary.'); break; }
+  }
+  if (state.gateEnabled && state.points.length >= 2 && segLen(state.points[0], state.points[1]) < state.gateWidth) warn.push('Gate is wider than the first segment — it was clamped.');
+  const box = $('warnBox');
+  if (warn.length) { box.textContent = '⚠ ' + warn[0]; box.classList.add('show'); }
+  else box.classList.remove('show');
+  updateLeadSummary();
+}/* ---------------- pointer interaction ---------------- */
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+function groundPoint(e) {
+  const rect = container.getBoundingClientRect();
+  const ndc = new THREE.Vector2(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
+  raycaster.setFromCamera(ndc, camera);
+  const pt = new THREE.Vector3();
+  return raycaster.ray.intersectPlane(groundPlane, pt) ? pt : null;
+}
+
+let dragFrom = null;
+container.addEventListener('pointerdown', e => { dragFrom = { x: e.clientX, y: e.clientY }; });
+container.addEventListener('pointerup', e => {
+  const moved = dragFrom && Math.hypot(e.clientX - dragFrom.x, e.clientY - dragFrom.y) > 6;
+  dragFrom = null;
+  if (moved || !state.drawing) return;
+  if (e.button === 2 || e.button === 1) { e.preventDefault(); closeFence(); return; }
+  const pt = groundPoint(e);
+  if (!pt) return;
+  if (state.fenceClosed) { reopenFence(); return; }
+  if (state.points.length > 0) {
+    const first = state.points[0];
+    if (Math.hypot(pt.x - first.x, pt.z - first.z) < 0.8) { closeFence(); return; }
+    if (e.ctrlKey) {
+      let bi = -1, bd = 0.8;
+      for (let i = 0; i < state.points.length; i++) {
+        const d = Math.hypot(pt.x - state.points[i].x, pt.z - state.points[i].z);
+        if (d < bd) { bd = d; bi = i; }
+      }
+      if (bi >= 0) { state.points.splice(bi, 1); updateFence(); return; }
+    }
+  }
+  state.points.push({ x: round2(pt.x), z: round2(pt.z) });
+  updateFence();
+});
+container.addEventListener('contextmenu', e => e.preventDefault());
+container.addEventListener('pointermove', e => {
+  const pt = groundPoint(e);
+  if (!pt) return;
+  hoverMarker.visible = state.drawing && !state.fenceClosed;
+  if (hoverMarker.visible) hoverMarker.position.set(pt.x, 0.08, pt.z);
+  if (state.drawing && !state.fenceClosed && state.points.length > 0) {
+    const last = state.points[state.points.length - 1];
+    const arr = [last.x, 0.02, last.z, pt.x, 0.02, pt.z];
+    previewLine.geometry.dispose();
+    previewLine.geometry = new THREE.BufferGeometry();
+    previewLine.geometry.setAttribute('position', new THREE.Float32BufferAttribute(arr, 3));
+    previewLine.visible = true;
+    previewLine.computeLineDistances();
+  }
+  if (!state.drawing || !state.points.length) previewLine.visible = false;
+});
+
+function setDrawing(on) {
+  state.drawing = on;
+  $('drawToggle').classList.toggle('active', on);
+  $('drawToggle').textContent = on ? '✋ Stop drawing' : '✏️ Draw fence';
+  container.style.cursor = on ? 'crosshair' : '';
+  hoverMarker.visible = false;
+  previewLine.visible = false;
+  updateFence();
+}
+function closeFence() {
+  if (state.points.length < 3) return;
+  state.fenceClosed = true;
+  updateFence();
+}
+function reopenFence() {
+  state.fenceClosed = false;
+  setDrawing(true);
+}
+function undoPoint() {
+  if (state.fenceClosed) { reopenFence(); return; }
+  state.points.pop();
+  updateFence();
+}
+function clearFence() {
+  if (state.points.length === 0) return;
+  if (!confirm('Clear all fence points?')) return;
+  state.points = [];
+  state.fenceClosed = false;
+  updateFence();
+}
+
+window.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && state.drawing && !state.fenceClosed) { e.preventDefault(); closeFence(); }
+  if (e.key === 'Escape') setDrawing(false);
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undoPoint(); }
+});
+
+/* ---------------- exports ---------------- */
+function download(name, content, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type: mime || 'text/plain' }));
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+function postsCSV() {
+  const rows = [];
+  rows.push('# Fence layout - 3D Home & Fence Visualizer');
+  rows.push('# Coordinate system: X east-west, Z north-south, metres. Origin = centre of land.');
+  rows.push('# ' + JSON.stringify({ home: state.homeType, style: state.fenceStyle, height_m: state.fenceHeight, post_spacing_m: state.postSpacing, closed: state.fenceClosed, land_w: state.landW, land_d: state.landD }));
+  rows.push('type,index,x_m,z_m');
+  state.points.forEach((p, i) => rows.push('VERTEX,' + i + ',' + p.x + ',' + p.z));
+  lastExport.posts.forEach((p, i) => rows.push('POST,' + i + ',' + p.x + ',' + p.z));
+  rows.push('# TOTALS,' + stats.length.toFixed(2) + ' m fencing,' + stats.posts + ' posts,' + stats.panels + ' panels,' + (stats.gate ? stats.gate + ' m gate' : 'no gate'));
+  if (lastExport.gateSeg) {
+    const gd = lastExport.gateSeg;
+    rows.push('GATE,0,' + gd.x0 + ',' + gd.z0 + ',' + gd.x1 + ',' + gd.z1 + ',width_m:' + gd.width.toFixed(2));
+  }
+  return rows.join('\n');
+}
+function projectJSON() {
+  return JSON.stringify({
+    app: '3D Home & Fence Visualizer',
+    generated_at: new Date().toISOString(),
+    units: 'metres (m)',
+    home: { model: state.homeType, rotation_deg: state.homeRot, offset_x_m: state.homeOX, offset_z_m: state.homeOZ },
+    land: { width_m: state.landW, depth_m: state.landD, area_m2: state.landW * state.landD },
+    fence: {
+      style: state.fenceStyle, height_m: state.fenceHeight, post_spacing_m: state.postSpacing,
+      gate: { enabled: state.gateEnabled, width_m: state.gateWidth },
+      closed: state.fenceClosed,
+      points: state.points
+    },
+    results: stats
+  }, null, 2);
+}
+
+/* ---------------- lead submission ---------------- */
+const STYLE_NAMES = { timber: 'Timber paling', metal: 'Wrought Iron', concrete: 'Concrete panel', chain: 'Chain Link' };
+function currentDesignStyle() { return STYLE_NAMES[state.fenceStyle] || state.fenceStyle; }
+function currentDesignSummary() {
+  const len = stats.length ? fmt(stats.length) + ' m' : '0 m';
+  return currentDesignStyle() + ' · ' + state.fenceHeight.toFixed(2) + ' m high · ' + len + ' of fencing';
+}
+function updateLeadSummary() {
+  const el = $('leadSummary');
+  const thanksHidden = $('leadThanks').classList.contains('hidden');
+  if (el && thanksHidden) el.textContent = currentDesignSummary();
+}
+function leadStatus(msg, kind) {
+  const el = $('leadStatus');
+  el.textContent = msg || '';
+  el.classList.toggle('show', !!msg);
+  el.className = el.className.replace(/\b(error|ok)\b/g, '').trim();
+  if (kind) el.classList.add(kind);
+}
+async function submitLead() {
+  const name = $('leadName').value.trim();
+  const email = $('leadEmail').value.trim();
+  const phone = $('leadPhone').value.trim();
+  if (!email && !phone) {
+    leadStatus('Please share an email or phone number so we can reach you.', 'error');
+    $('leadEmail').focus();
+    return;
+  }
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    leadStatus('That email address doesn\'t look right — please check it.', 'error');
+    $('leadEmail').focus();
+    return;
+  }
+  if (phone && !/^[+0-9 ()\-]+$/.test(phone)) {
+    leadStatus('Phone can only contain digits, spaces, dashes, parens, or a leading +.', 'error');
+    $('leadPhone').focus();
+    return;
+  }
+
+  const btn = $('leadSubmitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  leadStatus('', null);
+  try {
+    const blob = await new Promise((resolve, reject) => {
+      renderer.render(scene, camera);
+      renderer.domElement.toBlob(b => b ? resolve(b) : reject(new Error('Screenshot failed')), 'image/png');
+    });
+    const fd = new FormData();
+    fd.append('photoSource', 'UPLOADED');
+    fd.append('yardSide', $('leadYardSide').value);
+    fd.append('designStyle', currentDesignStyle());
+    if (name) fd.append('firstName', name);
+    if (email) fd.append('email', email);
+    if (phone) fd.append('phone', phone);
+    fd.append('file', blob, 'yardex-fence-design-' + Date.now() + '.png');
+
+    const res = await fetch('/api/public/ai-generation', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const msg = Array.isArray(data.message) ? data.message.join(', ')
+        : (data.message || 'Submission failed — please try again.');
+      throw new Error(res.status === 429 ? 'Too many submissions from this browser — please wait a while and try again.' : msg);
+    }
+    $('leadRef').textContent = data.id;
+    $('leadForm').classList.add('hidden');
+    $('leadThanks').classList.remove('hidden');
+  } catch (e) {
+    leadStatus(e?.message || 'Submission failed — please try again.', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '📩 Send design & get a quote';
+  }
+}
+
+/* ---------------- UI wiring ---------------- */
+let fenceRebuildPending = false;
+function scheduleFenceRebuild() {
+  if (fenceRebuildPending) return;
+  fenceRebuildPending = true;
+  requestAnimationFrame(() => { fenceRebuildPending = false; updateFence(); });
+}
+
+function initUI() {
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    ['home', 'fence', 'results'].forEach(t => $('tab-' + t).classList.add('hidden'));
+    btn.classList.add('active');
+    $('tab-' + btn.dataset.tab).classList.remove('hidden');
+  }));
+
+  document.querySelectorAll('.home-card').forEach(card => card.addEventListener('click', () => {
+    state.homeType = card.dataset.home;
+    document.querySelectorAll('.home-card').forEach(c => c.classList.toggle('active', c === card));
+    updateHome();
+  }));
+
+  $('landW').addEventListener('change', updateLand);
+  $('landD').addEventListener('change', updateLand);
+
+  $('rotRange').addEventListener('input', () => {
+    state.homeRot = Number($('rotRange').value);
+    $('rotVal').textContent = state.homeRot + '°';
+    updateHome();
+  });
+  $('nudgeLX').addEventListener('click', () => { state.homeOX = clamp(state.homeOX - 0.5, -state.landW / 2 + 1, state.landW / 2 - 1); updateHome(); });
+  $('nudgeRX').addEventListener('click', () => { state.homeOX = clamp(state.homeOX + 0.5, -state.landW / 2 + 1, state.landW / 2 - 1); updateHome(); });
+  $('nudgeDZ').addEventListener('click', () => { state.homeOZ = clamp(state.homeOZ - 0.5, -state.landD / 2 + 1, state.landD / 2 - 1); updateHome(); });
+  $('nudgeUZ').addEventListener('click', () => { state.homeOZ = clamp(state.homeOZ + 0.5, -state.landD / 2 + 1, state.landD / 2 - 1); updateHome(); });
+  $('resetPos').addEventListener('click', () => {
+    state.homeOX = state.homeOZ = 0; state.homeRot = 0;
+    $('rotRange').value = 0; $('rotVal').textContent = '0°';
+    updateHome();
+  });
+
+  $('drawToggle').addEventListener('click', () => setDrawing(!state.drawing));
+  $('undoBtn').addEventListener('click', undoPoint);
+  $('clearBtn').addEventListener('click', clearFence);
+  $('closeBtn').addEventListener('click', closeFence);
+  $('reopenBtn').addEventListener('click', reopenFence);
+  $('boundaryBtn').addEventListener('click', () => autoBoundary());
+  $('styleSel').addEventListener('change', () => { state.fenceStyle = $('styleSel').value; scheduleFenceRebuild(); });
+  $('heightRange').addEventListener('input', () => {
+    state.fenceHeight = Number($('heightRange').value);
+    $('heightVal').textContent = state.fenceHeight.toFixed(2) + ' m';
+    scheduleFenceRebuild();
+  });
+  $('spacingRange').addEventListener('input', () => {
+    state.postSpacing = Number($('spacingRange').value);
+    $('spacingVal').textContent = state.postSpacing.toFixed(1) + ' m';
+    scheduleFenceRebuild();
+  });
+  $('gateChk').addEventListener('change', () => { state.gateEnabled = $('gateChk').checked; scheduleFenceRebuild(); });
+  $('gateWidth').addEventListener('change', () => {
+    state.gateWidth = clamp(Number($('gateWidth').value) || 3, 0.5, 8);
+    $('gateWidth').value = state.gateWidth;
+    scheduleFenceRebuild();
+  });
+
+  $('btnPng').addEventListener('click', () => {
+    renderer.render(scene, camera);
+    renderer.domElement.toBlob(b => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(b);
+      a.download = 'fence-viz-' + Date.now() + '.png';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }, 'image/png');
+  });
+  $('btnCsv').addEventListener('click', () => download('fence-layout.csv', postsCSV(), 'text/csv'));
+  $('btnJson').addEventListener('click', () => download('fence-project.json', projectJSON(), 'application/json'));
+  $('leadSubmitBtn').addEventListener('click', submitLead);
+  $('leadCloseThanks').addEventListener('click', () => {
+    $('leadThanks').classList.add('hidden');
+    $('leadForm').classList.remove('hidden');
+    leadStatus('', null);
+  });
+  $('btnCsvCopy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(postsCSV());
+      $('btnCsvCopy').textContent = '✅ Copied!';
+      setTimeout(() => $('btnCsvCopy').textContent = '📋 Copy coordinates', 1500);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = postsCSV(); document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); ta.remove();
+      $('btnCsvCopy').textContent = '✅ Copied!';
+      setTimeout(() => $('btnCsvCopy').textContent = '📋 Copy coordinates', 1500);
+    }
+  });
+
+  $('helpClose').addEventListener('click', () => {
+    $('helpModal').classList.add('hidden');
+    try { localStorage.setItem('fv_help_seen', '1'); } catch {}
+  });
+  try { if (localStorage.getItem('fv_help_seen') === '1') $('helpModal').classList.add('hidden'); } catch {}
+  $('menuToggle').addEventListener('click', () => $('panel').classList.toggle('open'));
+}
+
+/* ---------------- thumbnails ---------------- */
+function generateThumbs() {
+  const rt = new THREE.WebGLRenderTarget(300, 190);
+  const cam = new THREE.PerspectiveCamera(45, 300 / 190, 0.1, 100);
+  const camPos = { bungalow: [14, 9, 15], 'two-story': [15, 10, 15], terrace: [12, 8, 14], villa: [17, 10, 17] };
+  for (const type of HOME_TYPES) {
+    const sc = new THREE.Scene();
+    sc.background = new THREE.Color(0xdcebf2);
+    sc.add(new THREE.HemisphereLight(0xffffff, 0x8a9a7c, 1.1));
+    const dl = new THREE.DirectionalLight(0xffffff, 1.8);
+    dl.position.set(10, 15, 8);
+    sc.add(dl);
+    sc.add(buildHome(type));
+    const p = camPos[type];
+    cam.position.set(p[0], p[1], p[2]);
+    cam.lookAt(0, 1.4, 0);
+    renderer.setRenderTarget(rt);
+    renderer.render(sc, cam);
+    const buf = new Uint8Array(300 * 190 * 4);
+    renderer.readRenderTargetPixels(rt, 0, 0, 300, 190, buf);
+    renderer.setRenderTarget(null);
+    const cv = document.createElement('canvas'); cv.width = 300; cv.height = 190;
+    const ctx = cv.getContext('2d');
+    const im = ctx.createImageData(300, 190);
+    for (let y = 0; y < 190; y++) {
+      const src = (189 - y) * 300 * 4;
+      const dst = y * 300 * 4;
+      for (let i = 0; i < 300 * 4; i++) im.data[dst + i] = buf[src + i];
+    }
+    ctx.putImageData(im, 0, 0);
+    const thumb = $('thumb-' + type);
+    thumb.style.backgroundImage = 'url(' + cv.toDataURL('image/png') + ')';
+    thumb.textContent = '';
+  }
+  rt.dispose();
+}
+
+/* ---------------- boot ---------------- */
+initScene();
+updateLand();
+autoBoundary(1);
+setDrawing(false);
+initUI();
+generateThumbs();
+requestAnimationFrame(function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+});
+console.log('3D Home & Fence Visualizer ready — all units in metres.');
+</script>
+</body>
+</html>

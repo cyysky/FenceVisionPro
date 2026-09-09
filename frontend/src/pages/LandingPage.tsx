@@ -55,40 +55,49 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      {/* ===== Hero ===== */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-16 text-center">
-        <div className="inline-block px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-medium mb-5">
-          AI-powered fence design, in seconds
+      {/* ===== Hero: 3D Home & Fence Visualizer ===== */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-10 sm:pt-14 pb-12">
+        <div className="text-center mb-6">
+          <div className="inline-block px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-medium mb-4">
+            Design in 3D — free preview · no signup
+          </div>
+          <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-slate-900 leading-tight">
+            Design your fence in <span className="text-brand-600">3D</span> before you commit.
+          </h1>
+          <p className="mt-4 text-base sm:text-lg text-slate-600 max-w-2xl mx-auto leading-relaxed">
+            Pick a home, draw your boundary, choose a style — then send the design to
+            Yardex as a lead and we'll follow up with a tailored quote within one business day.
+          </p>
+          <div className="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Link
+              to="/ai-generate"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-brand-200 bg-brand-50 text-brand-700 hover:bg-brand-100 transition"
+            >
+              <span aria-hidden>✨</span>
+              Prefer photo-based AI previews? Use the AI Yard Visualizer
+            </Link>
+            <Link
+              to="/login"
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-brand-50 transition"
+            >
+              Staff login
+            </Link>
+          </div>
         </div>
-        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-slate-900 leading-tight">
-          See your yard with a new fence
-          <br className="hidden sm:block" />
-          <span className="text-brand-600"> before you commit.</span>
-        </h1>
-        <p className="mt-6 text-lg sm:text-xl text-slate-600 max-w-2xl mx-auto leading-relaxed">
-          Upload a photo of your property or pick one of our curated homes.
-          Our AI renders your new fence in seconds — then a Yardex specialist
-          follows up with a tailored quote within one business day.
+
+        <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+          <iframe
+            src="/3d-home-fence-visualizer.html"
+            title="Yardex 3D Home & Fence Visualizer — design your fence and submit it as a lead"
+            allow="clipboard-write"
+            className="block w-full"
+            style={{ height: 'min(86vh, 840px)', border: 0 }}
+          />
+        </div>
+        <p className="mt-4 text-center text-xs text-slate-500">
+          Tip: draw your fence in the <b>Fence</b> tab, then choose the <b>Results</b> tab and hit
+          “Send design &amp; get a quote” — a Yardex specialist will call or email you.
         </p>
-        <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
-          <Link
-            to="/ai-generate"
-            className="inline-flex items-center gap-2 px-7 py-3 rounded-lg bg-brand-600 text-white font-semibold shadow-lg shadow-brand-600/20 hover:bg-brand-700 transition"
-          >
-            <span aria-hidden>✨</span>
-            Try the AI Yard Visualizer
-            <span aria-hidden>→</span>
-          </Link>
-          <Link
-            to="/login"
-            className="inline-flex items-center gap-2 px-7 py-3 rounded-lg border border-slate-200 bg-white text-slate-700 hover:border-brand-300 hover:bg-brand-50 transition"
-          >
-            Staff login
-          </Link>
-        </div>
-        <div className="mt-6 text-xs text-slate-500">
-          Free preview · No credit card · Reply within 1 business day
-        </div>
       </section>
 
       {/* ===== AI Generator feature highlight ===== */}
