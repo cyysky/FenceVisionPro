@@ -1,8 +1,47 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { AdminLead, archiveLead, convertLead, getLead, markContacted } from '../lib/publicAi';
 import { useToast } from '../components/ui/Toast';
 import { SkeletonRows } from '../components/ui/Skeleton';
+
+/**
+ * Embeds the 3D visualizer and hands it the lead's saved design
+ * JSON once the editor signals it is ready. postMessage keeps the
+ * data out of the URL so large designs can't blow request limits.
+ */
+function Lead3DDesign({ designJson }: { designJson: string }) {
+  const ref = useRef<HTMLIFrameElement>(null);
+  const [ready, setReady] = useState(false);
+  const compactJson = useMemo(() => {
+    try { return JSON.stringify(JSON.parse(designJson)); } catch { return designJson; }
+  }, [designJson]);
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === 'fv:ready') {
+        setReady(true);
+        ref.current?.contentWindow?.postMessage(
+          { type: 'fv:load', json: compactJson },
+          window.location.origin,
+        );
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [compactJson]);
+
+  return (
+    <iframe
+      ref={ref}
+      src="/3d-home-fence-visualizer.html"
+      title="Submitted 3D fence design"
+      allowFullScreen
+      className="block w-full rounded"
+      style={{ height: 'min(72vh, 720px)', border: 0, background: '#101820', visibility: ready ? 'visible' : 'hidden' }}
+    />
+  );
+}
 
 /**
  * Admin lead detail. Two-up comparison (submitted photo vs AI
@@ -135,6 +174,18 @@ export default function LeadDetailPage() {
           )}
         </div>
       </section>
+
+      {lead.designJson && (
+        <section className="bg-white border rounded overflow-hidden">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 pt-3 pb-1">
+            <div className="text-xs font-medium text-brand-700">3D design (submitted)</div>
+            <span className="text-xs text-slate-400">Interactive — drag to orbit, scroll to zoom, fullscreen in the corner</span>
+          </div>
+          <div className="p-3 pt-1">
+            <Lead3DDesign designJson={lead.designJson} />
+          </div>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-white border rounded p-4">

@@ -56,7 +56,7 @@ export default function LandingPage() {
       </header>
 
       {/* ===== Hero: 3D Home & Fence Visualizer ===== */}
-      <section className="max-w-[1500px] mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-10">
+      <section className="max-w-[1920px] mx-auto px-4 sm:px-6 pt-8 sm:pt-10 pb-10">
         <div className="text-center mb-5">
           <div className="inline-block px-3 py-1 rounded-full bg-brand-100 text-brand-800 text-xs font-medium mb-3">
             Design in 3D — free preview · no signup
@@ -90,8 +90,9 @@ export default function LandingPage() {
             src="/3d-home-fence-visualizer.html"
             title="Yardex 3D Home & Fence Visualizer — design your fence and submit it as a lead"
             allow="clipboard-write"
+            allowFullScreen
             className="block w-full"
-            style={{ height: 'clamp(520px, calc(100vh - 130px), 1200px)', border: 0 }}
+            style={{ height: 'clamp(520px, calc(100vh - 130px), 1400px)', border: 0 }}
           />
         </div>
         <p className="mt-3 text-center text-xs text-slate-500">

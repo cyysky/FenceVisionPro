@@ -242,6 +242,7 @@ export class AdminLeadsService {
     inputPhotoPath: lead.inputPhotoPath,
     inputGalleryId: lead.inputGalleryId,
     designStyle: lead.designStyle,
+    designJson: lead.designJson || null,
     status: lead.renderStatus,
     renderUrl: lead.renderUrl,
     renderError: lead.renderError,

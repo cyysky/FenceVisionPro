@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsJSON,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -62,4 +63,13 @@ export class SubmitLeadDto {
   @IsOptional()
   @IsBoolean()
   agreeTerms?: boolean;
+
+  // Full design state exported by the 3D Home & Fence Visualizer.
+  // JSON is validated but not interpreted server-side - the admin
+  // UI reloads it into the same visualizer.
+  @IsOptional()
+  @IsString()
+  @IsJSON()
+  @MaxLength(50000)
+  designJson?: string;
 }

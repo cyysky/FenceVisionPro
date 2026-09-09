@@ -131,6 +131,16 @@ describe('PublicAiService - submit validation', () => {
     await svc.submit({ photoSource: 'UPLOADED', yardSide: 'FRONT', email: 'a@b.co' } as any, file);
     expect((svc as any).storage.saveBuffer).toHaveBeenCalled();
   });
+
+  it('persists the 3D visualizer design JSON on the lead', async () => {
+    const designJson = JSON.stringify({ app: '3D Home & Fence Visualizer', fence: { style: 'timber', points: [{ x: -8, z: -8 }] } });
+    await svc.submit({ photoSource: 'GALLERY', yardSide: 'FRONT', galleryId: 'front1', email: 'a@b.co', designJson } as any);
+    expect(prisma.publicLead.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ designJson }),
+      }),
+    );
+  });
 });
 
 describe('PublicAiService - getStatus / getResult', () => {

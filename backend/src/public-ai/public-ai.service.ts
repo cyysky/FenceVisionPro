@@ -135,6 +135,7 @@ export class PublicAiService {
         inputPhotoPath: '', // filled in below
         inputGalleryId: input.photoSource === PublicLeadPhotoSource.GALLERY ? input.galleryId! : null,
         designStyle: input.designStyle || null,
+        designJson: input.designJson || null,
         renderStatus: PublicLeadStatus.PENDING,
       },
     });

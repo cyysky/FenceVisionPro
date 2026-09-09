@@ -122,6 +122,16 @@
     color: var(--text); font-size: 20px; padding: 6px 12px; cursor: pointer;
   }
 
+  #fullscreenBtn {
+    position: fixed; top: 12px; right: 12px; z-index: 15;
+    background: rgba(24,35,46,0.92); border: 1px solid var(--line); border-radius: 10px;
+    color: var(--text); font-size: 13px; padding: 8px 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 6px; backdrop-filter: blur(4px);
+    transition: all .15s;
+  }
+  #fullscreenBtn:hover { border-color: var(--accent); color: var(--accent); }
+  #fullscreenBtn .fs-note { font-size: 12px; }
+
   #helpModal {
     position: fixed; inset: 0; background: rgba(5,10,15,0.65); z-index: 20;
     display: flex; align-items: center; justify-content: center; padding: 20px;
@@ -164,6 +174,9 @@
 <div id="viewer"></div>
 
 <div id="menuToggle" title="Menu">☰</div>
+<button id="fullscreenBtn" title="Toggle fullscreen">
+  <span id="fsIcon">⛶</span><span class="fs-note" id="fsLabel">Fullscreen</span>
+</button>
 
 <aside id="panel">
   <header>
@@ -1203,6 +1216,9 @@ async function submitLead() {
     if (name) fd.append('firstName', name);
     if (email) fd.append('email', email);
     if (phone) fd.append('phone', phone);
+    // Keep the full design state so the sales team can reopen this
+    // exact 3D scene from the lead.
+    fd.append('designJson', projectJSON());
     fd.append('file', blob, 'yardex-fence-design-' + Date.now() + '.png');
 
     const res = await fetch('/api/public/ai-generation', { method: 'POST', body: fd });
@@ -1364,13 +1380,136 @@ function generateThumbs() {
   rt.dispose();
 }
 
+/* ---------------- fullscreen ---------------- */
+function isFullscreen() {
+  return !!(document.fullscreenElement || document.webkitFullscreenElement);
+}
+function enterFullscreen() {
+  const el = document.documentElement;
+  const req = el.requestFullscreen || el.webkitRequestFullscreen;
+  if (req) Promise.resolve(req.call(el)).catch(() => {});
+}
+function exitFullscreen() {
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if (exit) Promise.resolve(exit.call(document)).catch(() => {});
+}
+function syncFsButton() {
+  const on = isFullscreen();
+  $('fsIcon').textContent = on ? '✕' : '⛶';
+  $('fsLabel').textContent = on ? 'Exit' : 'Fullscreen';
+}
+function setupFullscreen() {
+  $('fullscreenBtn').addEventListener('click', () => (isFullscreen() ? exitFullscreen() : enterFullscreen()));
+  document.addEventListener('fullscreenchange', syncFsButton);
+  document.addEventListener('webkitfullscreenchange', syncFsButton);
+  syncFsButton();
+}
+
+/* ---------------- load saved project (from ?load=<base64url JSON>) ---------------- */
+function b64UrlDecode(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+  const bin = atob(padded);
+  const bytes = Uint8Array.from(bin, c => c.charCodeAt(0));
+  return new TextDecoder().decode(bytes);
+}
+
+function loadProject(project) {
+  if (!project || typeof project !== 'object') return false;
+  const home = project.home || {};
+  const land = project.land || {};
+  const fence = project.fence || {};
+  const gate = fence.gate || {};
+
+  // Home model
+  if (HOME_TYPES.includes(home.model)) {
+    state.homeType = home.model;
+    document.querySelectorAll('.home-card').forEach(c => c.classList.toggle('active', c.dataset.home === home.model));
+  }
+
+  // Land dimensions
+  if (Number.isFinite(Number(land.width_m))) $('landW').value = clamp(Number(land.width_m), 6, 80);
+  if (Number.isFinite(Number(land.depth_m))) $('landD').value = clamp(Number(land.depth_m), 6, 80);
+
+  // Home position / rotation (clamped to the loaded land bounds)
+  if (Number.isFinite(Number(home.rotation_deg))) {
+    let r = Number(home.rotation_deg) % 360;
+    if (r < 0) r += 360;
+    state.homeRot = r;
+  }
+  if (Number.isFinite(Number(home.offset_x_m))) state.homeOX = clamp(Number(home.offset_x_m), -state.landW / 2 + 1, state.landW / 2 - 1);
+  if (Number.isFinite(Number(home.offset_z_m))) state.homeOZ = clamp(Number(home.offset_z_m), -state.landD / 2 + 1, state.landD / 2 - 1);
+  $('rotRange').value = state.homeRot;
+  $('rotVal').textContent = state.homeRot + '°';
+  updateLand();
+  updateHome();
+
+  // Fence settings
+  const styles = ['timber', 'metal', 'concrete', 'chain'];
+  if (styles.includes(fence.style)) state.fenceStyle = fence.style;
+  if (Number.isFinite(Number(fence.height_m))) state.fenceHeight = clamp(Number(fence.height_m), 0.8, 2.5);
+  if (Number.isFinite(Number(fence.post_spacing_m))) state.postSpacing = clamp(Number(fence.post_spacing_m), 1, 4);
+  if (typeof gate.enabled === 'boolean') state.gateEnabled = gate.enabled;
+  if (Number.isFinite(Number(gate.width_m))) state.gateWidth = clamp(Number(gate.width_m), 0.5, 8);
+  $('styleSel').value = state.fenceStyle;
+  $('heightRange').value = state.fenceHeight;
+  $('heightVal').textContent = state.fenceHeight.toFixed(2) + ' m';
+  $('spacingRange').value = state.postSpacing;
+  $('spacingVal').textContent = state.postSpacing.toFixed(1) + ' m';
+  $('gateChk').checked = state.gateEnabled;
+  $('gateWidth').value = state.gateWidth;
+
+  if (Array.isArray(fence.points)) {
+    state.points = fence.points
+      .filter(p => p && Number.isFinite(Number(p.x)) && Number.isFinite(Number(p.z)))
+      .map(p => ({ x: round2(Number(p.x)), z: round2(Number(p.z)) }));
+    state.fenceClosed = !!fence.closed;
+  }
+  setDrawing(false);
+  updateFence();
+  updateLeadSummary();
+  return true;
+}
+
+function loadProjectFromQuery() {
+  const raw = new URLSearchParams(location.search).get('load');
+  if (!raw) return false;
+  try {
+    const json = raw.startsWith('{') ? raw : b64UrlDecode(raw);
+    const ok = loadProject(JSON.parse(json));
+    if (ok) $('helpModal').classList.add('hidden');
+    return ok;
+  } catch (e) {
+    console.warn('Could not load saved 3D design:', e);
+    return false;
+  }
+}
+
 /* ---------------- boot ---------------- */
 initScene();
 updateLand();
 autoBoundary(1);
 setDrawing(false);
 initUI();
+setupFullscreen();
+loadProjectFromQuery();
 generateThumbs();
+// Parent pages (e.g. the admin lead view) can hand us a saved
+// design after we signal readiness - keeps large JSON out of URLs.
+window.addEventListener('message', e => {
+  if (e.origin !== window.location.origin) return;
+  const d = e.data;
+  if (d && d.type === 'fv:load' && typeof d.json === 'string') {
+    try {
+      if (loadProject(JSON.parse(d.json))) $('helpModal').classList.add('hidden');
+    } catch (err) {
+      console.warn('Could not load saved 3D design:', err);
+    }
+  }
+});
+if (window.parent && window.parent !== window) {
+  window.parent.postMessage({ type: 'fv:ready' }, window.location.origin);
+}
 requestAnimationFrame(function animate() {
   requestAnimationFrame(animate);
   controls.update();

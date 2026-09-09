@@ -93,6 +93,7 @@ export interface AdminLead {
   inputPhotoPath: string;
   inputGalleryId?: string | null;
   designStyle?: string | null;
+  designJson?: string | null;
   status: string;
   renderUrl?: string | null;
   renderError?: string | null;

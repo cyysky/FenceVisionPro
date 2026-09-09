@@ -272,6 +272,10 @@ model PublicLead {
   // The chosen design style id (Privacy / Picket / Wrought Iron / etc.)
   designStyle     String?
 
+  // 3D editor design JSON (present when the lead was submitted
+  // from the 3D Home & Fence Visualizer).
+  designJson      String?
+
   // AI render output
   renderStatus    PublicLeadStatus        @default(PENDING)
   renderUrl       String?
